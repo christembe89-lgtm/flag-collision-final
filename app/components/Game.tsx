@@ -35,6 +35,7 @@ export default function Game() {
     const [ranking, setRanking] = useState<RankingEntry[]>([]);
     const [pointsToWin, setPointsToWin] = useState<number>(5);
     const [tempPoints, setTempPoints] = useState<number>(5);
+    const [isDarkMode, setIsDarkMode] = useState(true);
 
     // Flags State
     const [flags, setFlags] = useState<FlagEntity[]>([]);
@@ -109,7 +110,6 @@ export default function Game() {
                 newRanking = [...rankingRef.current, { code: winner.code, name: winner.name, wins: 1 }];
             }
 
-            // Ordenar por wins (decrescente) e depois por nome (alfabético)
             newRanking = newRanking
                 .sort((a, b) => {
                     if (b.wins !== a.wins) {
@@ -122,12 +122,12 @@ export default function Game() {
             rankingRef.current = newRanking;
             setRanking(newRanking);
 
-            // Verificar se alguém atingiu o número de pontos para vencer
             const championFound = newRanking.find(entry => entry.wins >= pointsToWin);
             if (championFound) {
                 setChampion(championFound);
                 setGameStatus('champion');
             }
+            // REMOVE o setTimeout aqui!
         }
     }, [gameStatus, winner, pointsToWin]);
 
@@ -147,6 +147,7 @@ export default function Game() {
 
     const initGame = () => {
         if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
 
         if (!containerRef.current || containerRef.current.clientWidth < 100) {
             console.log('Waiting for layout...');
@@ -154,11 +155,11 @@ export default function Game() {
             return;
         }
 
+        // Limpar tudo PRIMEIRO
         flagsRef.current = [];
         setFlags([]);
-        updateHud(0);
         setWinner(null);
-        setGameStatus('spawning');
+        updateHud(0);
 
         const { clientWidth, clientHeight } = containerRef.current;
         gameBoundsRef.current = {
@@ -180,6 +181,8 @@ export default function Game() {
 
         const shuffled = [...availableFlags].sort(() => Math.random() - 0.5).slice(0, spawnCount);
         let spawnedNum = 0;
+
+        setGameStatus('spawning');
 
         spawnTimerRef.current = setInterval(() => {
             if (spawnedNum >= shuffled.length) {
@@ -389,20 +392,29 @@ export default function Game() {
 
     const continents = ['Todos', 'Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
 
+    // Adicione este useEffect para sincronizar o tema com o documento
+    useEffect(() => {
+        if (isDarkMode) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }, [isDarkMode]);
+
     return (
-        <div ref={containerRef} className="relative w-full h-screen overflow-hidden bg-slate-900 flex items-center justify-center font-sans">
+        <div ref={containerRef} className={`relative w-full h-screen overflow-hidden flex items-center justify-center font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
 
             {/* Ranking Panel */}
-            <div className="absolute top-6 left-6 z-[90] flex flex-col space-y-2 pointer-events-none">
-                <h3 className="text-white text-xl font-black italic tracking-tighter drop-shadow-md ml-4 mb-2">Ranking</h3>
-                <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-6 pr-12 min-w-[200px] shadow-2xl">
+            <div className="absolute top-6 left-24 z-[90] flex flex-col space-y-2 pointer-events-none">
+                <h3 className={`text-xl font-black italic tracking-tighter drop-shadow-md ml-4 mb-2 transition-colors ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Ranking</h3>
+                <div className={`backdrop-blur-xl border rounded-[2.5rem] p-6 pr-12 min-w-[200px] shadow-2xl transition-colors ${isDarkMode ? 'bg-slate-900/40 border-white/10' : 'bg-white/60 border-slate-300/30'}`}>
                     <div className="space-y-3">
-                        {ranking.length === 0 && <p className="text-slate-500 text-sm italic">Waiting for battle...</p>}
+                        {ranking.length === 0 && <p className={`text-sm italic ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Waiting for battle...</p>}
                         {ranking.map((entry, i) => (
                             <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-3 group">
-                                <span className="text-slate-400 font-bold text-lg w-4">{i + 1}.</span>
-                                <span className="text-white font-black text-sm tracking-tight drop-shadow-sm truncate max-w-[120px]">{entry.name}</span>
-                                <span className="text-yellow-400 font-bold text-sm ml-auto">{entry.wins}/{pointsToWin}</span>
+                                <span className={`font-bold text-lg w-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{i + 1}.</span>
+                                <span className={`font-black text-sm tracking-tight drop-shadow-sm truncate max-w-[120px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{entry.name}</span>
+                                <span className={`font-bold text-sm ml-auto ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>{entry.wins}/{pointsToWin}</span>
                             </div>
                         ))}
                     </div>
@@ -411,25 +423,49 @@ export default function Game() {
 
             {/* HUD */}
             <div className="absolute top-6 right-6 z-[110] flex flex-col items-end space-y-4">
-                <button onClick={() => setIsSidebarOpen(true)} className="p-4 bg-slate-800/80 hover:bg-slate-700 text-white rounded-3xl border border-white/10 shadow-xl backdrop-blur-md transition-all active:scale-95">
-                    <div className="flex flex-col space-y-1.5 w-6">
-                        <span className="block h-0.5 w-full bg-white rounded-full"></span>
-                        <span className="block h-0.5 w-full bg-white rounded-full"></span>
-                        <span className="block h-0.5 w-full bg-white rounded-full"></span>
-                    </div>
-                </button>
+                <div className="flex flex-row items-center space-x-4">
+                    {/* Botão de Tema - Ao lado esquerdo do Menu */}
+                    <button 
+                        onClick={() => setIsDarkMode(!isDarkMode)}
+                        className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
+                        title={isDarkMode ? 'Modo Claro' : 'Modo Escuro'}
+                    >
+                        {isDarkMode ? (
+                            // Ícone do Sol (Modo Claro)
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1m-16 0H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        ) : (
+                            // Ícone da Lua (Modo Escuro)
+                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                            </svg>
+                        )}
+                    </button>
 
-                <div className="w-20 h-20 rounded-full border-[6px] border-white/20 bg-slate-800/60 backdrop-blur-md shadow-2xl flex items-center justify-center overflow-hidden">
+                    {/* Botão de Menu */}
+                    <button onClick={() => setIsSidebarOpen(true)} className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}>
+                        <div className="flex flex-col space-y-1.5 w-6">
+                            <span className={`block h-0.5 w-full rounded-full ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
+                            <span className={`block h-0.5 w-full rounded-full ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
+                            <span className={`block h-0.5 w-full rounded-full ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
+                        </div>
+                    </button>
+                </div>
+
+                {/* Círculo com Bandeira - Embaixo do Menu */}
+                <div className={`rounded-full border-[6px] flex items-center justify-center overflow-hidden transition-colors ${isDarkMode ? 'border-white/20 bg-slate-800/60' : 'border-slate-400/20 bg-slate-200/60'} shadow-2xl backdrop-blur-md`} style={{ width: '80px', height: '80px' }}>
                     {ranking.length > 0 ? (
                         <img src={`https://flagcdn.com/w160/${ranking[0].code}.png`} className="w-full h-full object-cover" alt={ranking[0].name} />
                     ) : (
-                        <div className="text-slate-500 text-xs">--</div>
+                        <div className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>--</div>
                     )}
                 </div>
 
-                <div className="bg-black/60 backdrop-blur-xl px-6 py-2 rounded-xl border border-white/5 flex items-center space-x-3 shadow-2xl">
-                    <span className="text-white font-black text-2xl tracking-tight">Alive:</span>
-                    <span ref={hudRef} className="text-green-400 font-black text-3xl tabular-nums drop-shadow-[0_0_10px_rgba(74,222,128,0.4)]">0</span>
+                {/* Alive - Embaixo do Círculo */}
+                <div className={`backdrop-blur-xl px-6 py-2 rounded-xl border flex items-center space-x-3 shadow-2xl transition-colors ${isDarkMode ? 'bg-black/60 border-white/5' : 'bg-white/60 border-slate-300/30'}`}>
+                    <span className={`font-black text-2xl tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Alive:</span>
+                    <span ref={hudRef} className="font-black text-3xl tabular-nums drop-shadow-[0_0_10px_rgba(74,222,128,0.4)] text-green-400">0</span>
                 </div>
             </div>
 
@@ -473,7 +509,7 @@ export default function Game() {
             </div>
 
             {/* Arena */}
-            <div ref={arenaBgRef} className="absolute rounded-full border-[6px] border-indigo-500/50 bg-slate-800/50 shadow-[0_0_100px_rgba(99,102,241,0.2)] transition-all duration-75 ease-linear pointer-events-none" style={{ width: '600px', height: '600px' }}>
+            <div ref={arenaBgRef} className={`absolute rounded-full border-[6px] transition-all duration-75 ease-linear pointer-events-none ${isDarkMode ? 'border-indigo-500/50 bg-slate-800/50 shadow-[0_0_100px_rgba(99,102,241,0.2)]' : 'border-indigo-400/50 bg-slate-200/50 shadow-[0_0_100px_rgba(99,102,241,0.1)]'}`} style={{ width: '600px', height: '600px' }}>
                 <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full bg-black border-4 border-slate-500 shadow-[inset_0_10px_20px_rgba(0,0,0,0.8)]"></div>
             </div>
 
@@ -517,11 +553,18 @@ export default function Game() {
                         {gameStatus === 'winner' && (
                             <div className="flex flex-col items-center">
                                 <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.6)] bg-white">
-                                    {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover" />}
+                                    {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover" alt={winner.name} />}
                                 </div>
                                 <h2 className="text-2xl text-yellow-400 font-extrabold mb-1">ROUND CHAMPION</h2>
                                 <h1 className="text-5xl text-white font-black mb-10">{winner?.name}</h1>
-                                <button onClick={initGame} className="w-full py-4 bg-slate-700 text-white font-bold rounded-2xl text-xl">Play Again</button>
+                                <button onClick={() => {
+                                    setWinner(null);
+                                    flagsRef.current = [];
+                                    setFlags([]);
+                                    arenaRadiusRef.current = initialRadiusRef.current;
+                                    updateArenaVisual();
+                                    initGame();
+                                }} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl text-xl">Play Again</button>
                             </div>
                         )}
                         {gameStatus === 'champion' && champion && (
@@ -539,7 +582,7 @@ export default function Game() {
                 </div>
             )}
 
-            <style jsx global>{`
+            {/* <style jsx global>{`
                 @keyframes popIn {
                     0% { transform: scale(0); }
                     100% { transform: scale(1); }
@@ -548,7 +591,7 @@ export default function Game() {
                     filter: grayscale(100%) brightness(0.5);
                     z-index: 5;
                 }
-            `}</style>
+            `}</style> */}
         </div>
     );
 }
