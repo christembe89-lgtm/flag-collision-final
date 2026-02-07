@@ -110,24 +110,23 @@ export default function Game() {
                 newRanking = [...rankingRef.current, { code: winner.code, name: winner.name, wins: 1 }];
             }
 
+            // Ordena, mas NÃO faz slice aqui!
             newRanking = newRanking
                 .sort((a, b) => {
                     if (b.wins !== a.wins) {
                         return b.wins - a.wins;
                     }
                     return a.name.localeCompare(b.name);
-                })
-                .slice(0, 5);
+                });
 
             rankingRef.current = newRanking;
-            setRanking(newRanking);
+            setRanking(newRanking); // ranking agora é o array completo
 
             const championFound = newRanking.find(entry => entry.wins >= pointsToWin);
             if (championFound) {
                 setChampion(championFound);
                 setGameStatus('champion');
             }
-            // REMOVE o setTimeout aqui!
         }
     }, [gameStatus, winner, pointsToWin]);
 
@@ -463,9 +462,18 @@ export default function Game() {
                 </div>
 
                 {/* Alive - Embaixo do Círculo */}
-                <div className={`backdrop-blur-xl px-6 py-2 rounded-xl border flex items-center space-x-3 shadow-2xl transition-colors ${isDarkMode ? 'bg-black/60 border-white/5' : 'bg-white/60 border-slate-300/30'}`}>
-                    <span className={`font-black text-2xl tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Alive:</span>
-                    <span ref={hudRef} className="font-black text-3xl tabular-nums drop-shadow-[0_0_10px_rgba(74,222,128,0.4)] text-green-400">0</span>
+                <div className="flex items-center space-x-3 mt-2">
+                    {/* Coração pulsando */}
+                    <svg
+                        className="w-8 h-8 animate-pulse"
+                        viewBox="0 0 24 24"
+                        fill="red"
+                        style={{ background: 'none' }}
+                    >
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                    {/* Número de vivos */}
+                    <span ref={hudRef} className="font-black text-3xl tabular-nums text-green-400">{flags.filter(f => f.status === 'live').length}</span>
                 </div>
             </div>
 
