@@ -56,7 +56,7 @@ export default function Game() {
     const arenaRadiusRef = useRef(300);
     const minArenaRadius = 100;
     const shrinkRate = 0.08;
-    const FLAG_RADIUS = 18; // 75% of 25 (approx 18.75)
+    const FLAG_RADIUS = 18; // 75% of original 25
     const GAP_SIZE = 0.15; // 15% of circle
     const gapRotationRef = useRef(0);
     const gapRotationSpeed = 0.01; // Radians per frame
@@ -398,8 +398,8 @@ export default function Game() {
                             other.x += nx * pushForce;
                             other.y += ny * pushForce;
 
-                            // Visual feedback
-                            if (status === 'playing') createExplosion((f.x + other.x) / 2, (f.y + other.y) / 2);
+                            // Visual feedback (Stain effect commented out)
+                            // if (status === 'playing') createExplosion((f.x + other.x) / 2, (f.y + other.y) / 2);
                         } else {
                             // Menu collisions
                             f.vx -= nx * 4;
@@ -458,9 +458,10 @@ export default function Game() {
             loser.vy = Math.sin(angle) * 12 - 5;
         }
 
-        createExplosion(loser.x, loser.y);
+        // createExplosion(loser.x, loser.y);
     };
 
+    /*
     const createExplosion = (x: number, y: number) => {
         const arena = flagsContainerRef.current;
         if (!arena) return;
@@ -477,6 +478,7 @@ export default function Game() {
         });
         setTimeout(() => el.remove(), 400);
     };
+    */
 
     const continents = ['All', 'Africa', 'America', 'Asia', 'Europe', 'Oceania'];
 
@@ -631,8 +633,8 @@ export default function Game() {
                         id={`flag-${f.id}`}
                         className={`flag-entity shadow-lg text-center ${f.status === 'dead' ? 'dead' : ''}`}
                         style={{
-                            width: '50px',
-                            height: '50px',
+                            width: '25px',
+                            height: '25px',
                             position: 'absolute',
                             animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                             willChange: 'transform',
@@ -653,7 +655,7 @@ export default function Game() {
             {
                 gameStatus !== 'playing' && gameStatus !== 'spawning' && (
                     <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-                        <div className={`text-center p-8 rounded-[2.5rem] border shadow-2xl w-full max-w-sm ${isDarkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'}`}>
+                        <div className={`text-center p-8 rounded-[2.5rem] border shadow-2xl w-full max-w-sm transform scale-[0.9] ${isDarkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'}`}>
                             {gameStatus === 'menu' && (
                                 <div className="flex flex-col items-center">
                                     <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
