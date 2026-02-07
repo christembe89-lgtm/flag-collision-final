@@ -11,7 +11,7 @@ interface FlagEntity {
     y: number;
     vx: number;
     vy: number;
-    status: 'live' | 'dead';
+    status: 'live' | 'dead' | 'frozen';
     radius: number;
 }
 
@@ -27,11 +27,14 @@ export default function Game() {
     const flagsContainerRef = useRef<HTMLDivElement>(null);
 
     // Game State
-    const [gameStatus, setGameStatus] = useState<'menu' | 'spawning' | 'playing' | 'winner'>('menu');
+    const [gameStatus, setGameStatus] = useState<'menu' | 'spawning' | 'playing' | 'winner' | 'champion'>('menu');
     const [winner, setWinner] = useState<FlagEntity | null>(null);
+    const [champion, setChampion] = useState<RankingEntry | null>(null);
     const [selectedContinent, setSelectedContinent] = useState<string>('Todos');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [ranking, setRanking] = useState<RankingEntry[]>([]);
+    const [pointsToWin, setPointsToWin] = useState<number>(5);
+    const [tempPoints, setTempPoints] = useState<number>(5);
 
     // Flags State
     const [flags, setFlags] = useState<FlagEntity[]>([]);
@@ -43,6 +46,7 @@ export default function Game() {
     const gameBoundsRef = useRef({ width: 0, height: 0, centerX: 0, centerY: 0 });
     const hudRef = useRef<HTMLSpanElement>(null);
     const gameStatusRef = useRef(gameStatus);
+    const rankingRef = useRef<RankingEntry[]>([]);
 
     // Arena Constants
     const initialRadiusRef = useRef(300);
@@ -95,23 +99,37 @@ export default function Game() {
     // Atualizar ranking quando há um vencedor
     useEffect(() => {
         if (gameStatus === 'winner' && winner) {
-            setRanking(prev => {
-                const existingIndex = prev.findIndex(r => r.code === winner.code);
-                let newRanking: RankingEntry[];
+            const existingIndex = rankingRef.current.findIndex(r => r.code === winner.code);
+            let newRanking: RankingEntry[];
 
-                if (existingIndex !== -1) {
-                    newRanking = [...prev];
-                    newRanking[existingIndex].wins += 1;
-                } else {
-                    newRanking = [...prev, { code: winner.code, name: winner.name, wins: 1 }];
-                }
+            if (existingIndex !== -1) {
+                newRanking = [...rankingRef.current];
+                newRanking[existingIndex].wins += 1;
+            } else {
+                newRanking = [...rankingRef.current, { code: winner.code, name: winner.name, wins: 1 }];
+            }
 
-                return newRanking
-                    .sort((a, b) => b.wins - a.wins)
-                    .slice(0, 5);
-            });
+            // Ordenar por wins (decrescente) e depois por nome (alfabético)
+            newRanking = newRanking
+                .sort((a, b) => {
+                    if (b.wins !== a.wins) {
+                        return b.wins - a.wins;
+                    }
+                    return a.name.localeCompare(b.name);
+                })
+                .slice(0, 5);
+
+            rankingRef.current = newRanking;
+            setRanking(newRanking);
+
+            // Verificar se alguém atingiu o número de pontos para vencer
+            const championFound = newRanking.find(entry => entry.wins >= pointsToWin);
+            if (championFound) {
+                setChampion(championFound);
+                setGameStatus('champion');
+            }
         }
-    }, [gameStatus, winner]);
+    }, [gameStatus, winner, pointsToWin]);
 
     const updateArenaVisual = () => {
         if (arenaBgRef.current) {
@@ -177,7 +195,7 @@ export default function Game() {
             if (gameBoundsRef.current.width < 100 || startX < 50) return;
 
             const angle = Math.random() * Math.PI * 2;
-            const speed = 4 + Math.random() * 3;
+            const speed = 2 + Math.random() * 2;
 
             const newFlag: FlagEntity = {
                 id: spawnedNum,
@@ -199,6 +217,14 @@ export default function Game() {
         }, 150);
 
         startLoop();
+    };
+
+    const resetGame = () => {
+        rankingRef.current = [];
+        setRanking([]);
+        setChampion(null);
+        setTempPoints(pointsToWin);
+        setGameStatus('menu');
     };
 
     const startLoop = () => {
@@ -238,6 +264,12 @@ export default function Game() {
             const el = document.getElementById(`flag-${f.id}`);
             if (!el) continue;
 
+            // Se está frozen, pula a física
+            if (f.status === 'frozen') {
+                el.style.transform = `translate(${f.x - f.radius}px, ${f.y - f.radius}px)`;
+                continue;
+            }
+
             if (f.status === 'live') {
                 currentLiveCount++;
                 lastLiveFlag = f;
@@ -259,8 +291,8 @@ export default function Game() {
                     const overlap = dist - maxD;
                     f.x -= nx * (overlap + 1);
                     f.y -= ny * (overlap + 1);
-                    f.vx *= 0.95;
-                    f.vy *= 0.95;
+                    f.vx *= 0.97;
+                    f.vy *= 0.97;
                 }
 
                 for (let j = i + 1; j < flags.length; j++) {
@@ -278,21 +310,25 @@ export default function Game() {
                         const ny = dy2 / d;
                         const overlap = minDist - d;
 
-                        f.x -= nx * overlap * 0.5;
-                        f.y -= ny * overlap * 0.5;
-                        other.x += nx * overlap * 0.5;
-                        other.y += ny * overlap * 0.5;
+                        // Separar as bandeiras de forma suave
+                        f.x -= nx * overlap * 0.3;
+                        f.y -= ny * overlap * 0.3;
+                        other.x += nx * overlap * 0.3;
+                        other.y += ny * overlap * 0.3;
 
                         if (status === 'playing') {
                             const fWins = Math.random() > 0.5;
                             eliminateFlag(fWins ? other : f, fWins ? f : other);
                         } else {
-                            f.vx -= nx * 5; f.vy -= ny * 5;
-                            other.vx += nx * 5; other.vy += ny * 5;
+                            // Colisão suave no menu
+                            f.vx -= nx * 2;
+                            f.vy -= ny * 2;
+                            other.vx += nx * 2;
+                            other.vy += ny * 2;
                         }
                     }
                 }
-            } else {
+            } else if (f.status === 'dead') {
                 f.vy += 0.8; f.vx *= 0.99;
                 f.x += f.vx; f.y += f.vy;
                 const floorY = gameBoundsRef.current.height;
@@ -311,6 +347,12 @@ export default function Game() {
         if (currentLiveCount <= 1 && flags.length > 1 && status === 'playing') {
             setGameStatus('winner');
             setWinner(lastLiveFlag);
+            // Congelar a bandeira vencedora
+            if (lastLiveFlag) {
+                lastLiveFlag.status = 'frozen';
+                lastLiveFlag.vx = 0;
+                lastLiveFlag.vy = 0;
+            }
         }
     };
 
@@ -357,10 +399,10 @@ export default function Game() {
                     <div className="space-y-3">
                         {ranking.length === 0 && <p className="text-slate-500 text-sm italic">Waiting for battle...</p>}
                         {ranking.map((entry, i) => (
-                            <div key={`${entry.code}-${i}`} className="flex items-center space-x-3 group">
+                            <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-3 group">
                                 <span className="text-slate-400 font-bold text-lg w-4">{i + 1}.</span>
                                 <span className="text-white font-black text-sm tracking-tight drop-shadow-sm truncate max-w-[120px]">{entry.name}</span>
-                                <span className="text-yellow-400 font-bold text-sm ml-auto">{entry.wins}</span>
+                                <span className="text-yellow-400 font-bold text-sm ml-auto">{entry.wins}/{pointsToWin}</span>
                             </div>
                         ))}
                     </div>
@@ -377,6 +419,14 @@ export default function Game() {
                     </div>
                 </button>
 
+                <div className="w-20 h-20 rounded-full border-[6px] border-white/20 bg-slate-800/60 backdrop-blur-md shadow-2xl flex items-center justify-center overflow-hidden">
+                    {ranking.length > 0 ? (
+                        <img src={`https://flagcdn.com/w160/${ranking[0].code}.png`} className="w-full h-full object-cover" alt={ranking[0].name} />
+                    ) : (
+                        <div className="text-slate-500 text-xs">--</div>
+                    )}
+                </div>
+
                 <div className="bg-black/60 backdrop-blur-xl px-6 py-2 rounded-xl border border-white/5 flex items-center space-x-3 shadow-2xl">
                     <span className="text-white font-black text-2xl tracking-tight">Alive:</span>
                     <span ref={hudRef} className="text-green-400 font-black text-3xl tabular-nums drop-shadow-[0_0_10px_rgba(74,222,128,0.4)]">0</span>
@@ -388,6 +438,29 @@ export default function Game() {
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
                 <div className={`absolute top-0 right-0 h-full w-80 bg-slate-900/95 backdrop-blur-2xl border-l border-white/10 shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-10 flex flex-col`}>
                     <h2 className="text-3xl font-black text-white tracking-tighter mb-12">AJUSTES</h2>
+                    
+                    {/* Points to Win Input */}
+                    <div className="mb-8">
+                        <label className="text-white font-bold text-sm block mb-3">Pontos para Vencer</label>
+                        <input 
+                            type="number" 
+                            min="1" 
+                            max="20"
+                            value={tempPoints}
+                            onChange={(e) => setTempPoints(parseInt(e.target.value) || 1)}
+                            className="w-full px-4 py-3 bg-slate-800 border border-white/20 rounded-lg text-white font-bold text-center text-xl focus:outline-none focus:border-blue-500"
+                        />
+                        <button
+                            onClick={() => {
+                                setPointsToWin(tempPoints);
+                                setIsSidebarOpen(false);
+                            }}
+                            className="w-full mt-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-all"
+                        >
+                            Aplicar
+                        </button>
+                    </div>
+
                     <div className="space-y-8">
                         {continents.map(cont => (
                             <button key={cont} onClick={() => { setSelectedContinent(cont); setIsSidebarOpen(false); }} className={`w-full py-5 px-8 rounded-[1.5rem] font-black text-left flex justify-between items-center ${selectedContinent === cont ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400'}`}>
@@ -434,19 +507,32 @@ export default function Game() {
             {gameStatus !== 'playing' && gameStatus !== 'spawning' && (
                 <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
                     <div className="text-center bg-slate-800 p-8 rounded-[2.5rem] border border-slate-600 shadow-2xl w-full max-w-sm">
-                        {gameStatus === 'menu' ? (
+                        {gameStatus === 'menu' && (
                             <div className="flex flex-col items-center">
                                 <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
+                                <p className="text-slate-400 text-sm mb-6">Pontos para vencer: <span className="text-yellow-400 font-bold">{pointsToWin}</span></p>
                                 <button onClick={initGame} className="w-full py-5 bg-blue-600 text-white font-bold rounded-2xl text-2xl mt-8">PLAY</button>
                             </div>
-                        ) : (
+                        )}
+                        {gameStatus === 'winner' && (
                             <div className="flex flex-col items-center">
                                 <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.6)] bg-white">
                                     {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover" />}
                                 </div>
-                                <h2 className="text-2xl text-yellow-400 font-extrabold mb-1">CHAMPION</h2>
+                                <h2 className="text-2xl text-yellow-400 font-extrabold mb-1">ROUND CHAMPION</h2>
                                 <h1 className="text-5xl text-white font-black mb-10">{winner?.name}</h1>
                                 <button onClick={initGame} className="w-full py-4 bg-slate-700 text-white font-bold rounded-2xl text-xl">Play Again</button>
+                            </div>
+                        )}
+                        {gameStatus === 'champion' && champion && (
+                            <div className="flex flex-col items-center">
+                                <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-green-400 shadow-[0_0_50px_rgba(34,197,94,0.6)] bg-white">
+                                    <img src={`https://flagcdn.com/w320/${champion.code}.png`} className="w-full h-full object-cover" />
+                                </div>
+                                <h2 className="text-2xl text-green-400 font-extrabold mb-1">GRAND CHAMPION</h2>
+                                <h1 className="text-5xl text-white font-black mb-2">{champion.name}</h1>
+                                <p className="text-xl text-green-400 font-bold mb-10">{champion.wins} Vitórias</p>
+                                <button onClick={resetGame} className="w-full py-4 bg-green-600 text-white font-bold rounded-2xl text-xl">Nova Competição</button>
                             </div>
                         )}
                     </div>
