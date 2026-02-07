@@ -389,7 +389,7 @@ export default function Game() {
         setTimeout(() => el.remove(), 400);
     };
 
-    const continents = ['Todos', 'Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
+    const continents = ['All', 'Africa', 'America', 'Asia', 'Europe', 'Oceania'];
 
     // Adicione este useEffect para sincronizar o tema com o documento
     useEffect(() => {
@@ -404,12 +404,12 @@ export default function Game() {
         <div ref={containerRef} className={`relative w-full h-screen overflow-hidden flex items-center justify-center font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
 
             {/* Ranking Panel */}
-            <div className="absolute top-6 left-24 z-[90] flex flex-col space-y-2 pointer-events-none">
+            <div className="absolute top-6 left-6 z-[90] flex flex-col space-y-2 pointer-events-none">
                 <h3 className={`text-xl font-black italic tracking-tighter drop-shadow-md ml-4 mb-2 transition-colors ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Ranking</h3>
                 <div className={`backdrop-blur-xl border rounded-[2.5rem] p-6 pr-12 min-w-[200px] shadow-2xl transition-colors ${isDarkMode ? 'bg-slate-900/40 border-white/10' : 'bg-white/60 border-slate-300/30'}`}>
                     <div className="space-y-3">
                         {ranking.length === 0 && <p className={`text-sm italic ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Waiting for battle...</p>}
-                        {ranking.map((entry, i) => (
+                        {ranking.slice(0, 5).map((entry, i) => (
                             <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-3 group">
                                 <span className={`font-bold text-lg w-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{i + 1}.</span>
                                 <span className={`font-black text-sm tracking-tight drop-shadow-sm truncate max-w-[120px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{entry.name}</span>
@@ -485,7 +485,7 @@ export default function Game() {
                     
                     {/* Points to Win Input */}
                     <div className="mb-8">
-                        <label className="text-white font-bold text-sm block mb-3">Pontos para Vencer</label>
+                        <label className="text-white font-bold text-sm block mb-3">Points to Win</label>
                         <input 
                             type="number" 
                             min="1" 
@@ -554,7 +554,7 @@ export default function Game() {
                         {gameStatus === 'menu' && (
                             <div className="flex flex-col items-center">
                                 <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
-                                <p className="text-slate-400 text-sm mb-6">Pontos para vencer: <span className="text-yellow-400 font-bold">{pointsToWin}</span></p>
+                                <p className="text-slate-400 text-sm mb-6">Points to Win: <span className="text-yellow-400 font-bold">{pointsToWin}</span></p>
                                 <button onClick={initGame} className="w-full py-5 bg-blue-600 text-white font-bold rounded-2xl text-2xl mt-8">PLAY</button>
                             </div>
                         )}
