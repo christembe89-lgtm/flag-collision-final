@@ -56,7 +56,7 @@ export default function Game() {
     const arenaRadiusRef = useRef(300);
     const minArenaRadius = 100;
     const shrinkRate = 0.08;
-    const FLAG_RADIUS = 18; // 75% of original 25
+    const FLAG_RADIUS = 18.75; // 75% of original 25
     const GAP_SIZE = 0.15; // 15% of circle
     const gapRotationRef = useRef(0);
     const gapRotationSpeed = 0.01; // Radians per frame
@@ -512,8 +512,8 @@ export default function Game() {
             </div>
 
             {/* HUD */}
-            <div className="absolute top-6 right-6 z-[131] flex flex-col items-end space-y-4">
-                <div className="flex flex-row items-center space-x-4">
+            <div className="absolute top-6 right-6 z-[131] flex flex-col items-end space-y-4 pointer-events-none">
+                <div className="flex flex-row items-center space-x-4 pointer-events-auto">
                     {/* Botão de Tema - Escondido quando sidebar está aberta */}
                     <button
                         onClick={() => setIsDarkMode(!isDarkMode)}
@@ -581,7 +581,7 @@ export default function Game() {
                                 setTempPoints(val);
                                 setPointsToWin(val);
                             }}
-                            className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                            className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
                         />
                     </div>
 
@@ -594,7 +594,7 @@ export default function Game() {
                             step="0.1"
                             value={gameSpeed}
                             onChange={(e) => setGameSpeed(parseFloat(e.target.value))}
-                            className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                            className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
                         />
                     </div>
                     <button
@@ -609,7 +609,7 @@ export default function Game() {
 
                     <div className="mt-10 space-y-4">
                         {continents.map(cont => (
-                            <button key={cont} onClick={() => { setSelectedContinent(cont); setIsSidebarOpen(false); }} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
+                            <button key={cont} onClick={() => setSelectedContinent(cont)} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
                                 <span>{cont}</span>
                             </button>
                         ))}
@@ -633,8 +633,8 @@ export default function Game() {
                         id={`flag-${f.id}`}
                         className={`flag-entity shadow-lg text-center ${f.status === 'dead' ? 'dead' : ''}`}
                         style={{
-                            width: '25px',
-                            height: '25px',
+                            width: '31px',
+                            height: '31px',
                             position: 'absolute',
                             animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                             willChange: 'transform',
