@@ -21,6 +21,24 @@ interface RankingEntry {
     wins: number;
 }
 
+interface GamePreset {
+    id: string;
+    name: string;
+    settings: {
+        pointsToWin: number;
+        tempPoints: number;
+        isDarkMode: boolean;
+        gameSpeed: number;
+        flagSize: number;
+        rotationSpeed: number;
+        gapSize: number;
+        showNames: boolean;
+        isAutoGame: boolean;
+        vibrationStrength: number;
+        collisionForce: number;
+    };
+}
+
 export default function Game() {
     const containerRef = useRef<HTMLDivElement>(null);
     const arenaBgRef = useRef<HTMLDivElement>(null);
@@ -45,6 +63,8 @@ export default function Game() {
     const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
     const [vibrationStrength, setVibrationStrength] = useState<number>(2);
     const [collisionForce, setCollisionForce] = useState<number>(15);
+    const [presets, setPresets] = useState<GamePreset[]>([]);
+    const [newPresetName, setNewPresetName] = useState('');
 
     // Flags State
     const [flags, setFlags] = useState<FlagEntity[]>([]);
@@ -127,8 +147,68 @@ export default function Game() {
         };
         window.addEventListener('resize', handleResize);
         setTimeout(handleResize, 100);
+        const savedPresets = localStorage.getItem('flagRoyale_presets');
+        if (savedPresets) {
+            try {
+                setPresets(JSON.parse(savedPresets));
+            } catch (e) {
+                console.error('Error loading presets', e);
+            }
+        }
+
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    // Persist presets to localStorage
+    useEffect(() => {
+        if (presets.length > 0) {
+            localStorage.setItem('flagRoyale_presets', JSON.stringify(presets));
+        }
+    }, [presets]);
+
+    const saveCurrentAsPreset = () => {
+        if (!newPresetName.trim()) return;
+
+        const newPreset: GamePreset = {
+            id: Date.now().toString(),
+            name: newPresetName.trim(),
+            settings: {
+                pointsToWin,
+                tempPoints,
+                isDarkMode,
+                gameSpeed,
+                flagSize,
+                rotationSpeed,
+                gapSize,
+                showNames,
+                isAutoGame,
+                vibrationStrength,
+                collisionForce
+            }
+        };
+
+        setPresets(prev => [...prev, newPreset]);
+        setNewPresetName('');
+    };
+
+    const loadPreset = (preset: GamePreset) => {
+        const s = preset.settings;
+        setPointsToWin(s.pointsToWin);
+        setTempPoints(s.tempPoints);
+        setIsDarkMode(s.isDarkMode);
+        setGameSpeed(s.gameSpeed);
+        setFlagSize(s.flagSize);
+        setRotationSpeed(s.rotationSpeed);
+        setGapSize(s.gapSize);
+        setShowNames(s.showNames);
+        setIsAutoGame(s.isAutoGame);
+        setVibrationStrength(s.vibrationStrength);
+        setCollisionForce(s.collisionForce);
+    };
+
+    const deletePreset = (id: string) => {
+        setPresets(prev => prev.filter(p => p.id !== id));
+    };
 
     // Flag Cycling
     useEffect(() => {
@@ -270,11 +350,11 @@ export default function Game() {
         gapRotationRef.current = 0; // Reset to vertical start
         updateArenaVisual();
 
-        const availableFlags = selectedContinent === 'Todos'
+        const availableFlags = selectedContinent === 'All'
             ? WORLD_FLAGS
             : WORLD_FLAGS.filter(f => f.continent === selectedContinent);
 
-        let spawnCount = selectedContinent === 'Todos' ? 120 : availableFlags.length;
+        let spawnCount = selectedContinent === 'All' ? 120 : availableFlags.length;
         spawnCount = Math.min(spawnCount, availableFlags.length);
 
         const shuffled = [...availableFlags].sort(() => Math.random() - 0.5).slice(0, spawnCount);
@@ -505,15 +585,14 @@ export default function Game() {
         }
 
         updateHud(currentLiveCount);
-        if (currentLiveCount <= 1 && flags.length > 1 && status === 'playing') {
+        if (currentLiveCount <= 1 && flags.length > 1 && status === 'playing' && lastLiveFlag) {
             setGameStatus('winner');
-            setWinner(lastLiveFlag);
-            // Congelar a bandeira vencedora
-            if (lastLiveFlag) {
-                lastLiveFlag.status = 'frozen';
-                lastLiveFlag.vx = 0;
-                lastLiveFlag.vy = 0;
-            }
+            setWinner({ ...lastLiveFlag });
+
+            // Freeze the winning flag
+            lastLiveFlag.status = 'frozen';
+            lastLiveFlag.vx = 0;
+            lastLiveFlag.vy = 0;
         }
     };
 
@@ -783,9 +862,56 @@ export default function Game() {
                             Apply
                         </button>
 
+                        <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
+                            <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Profiles</h3>
+
+                            <div className="flex space-x-2">
+                                <input
+                                    type="text"
+                                    placeholder="Profile Name..."
+                                    value={newPresetName}
+                                    onChange={(e) => setNewPresetName(e.target.value)}
+                                    className={`flex-1 bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                                />
+                                <button
+                                    onClick={saveCurrentAsPreset}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-all active:scale-95"
+                                    title="Save current settings as profile"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                {presets.length === 0 && <p className="text-xs italic opacity-50 px-1">No saved profiles yet.</p>}
+                                {presets.map(preset => (
+                                    <div key={preset.id} className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'}`}>
+                                        <button
+                                            onClick={() => loadPreset(preset)}
+                                            className="flex-1 text-left font-bold text-xs truncate mr-2"
+                                        >
+                                            {preset.name}
+                                        </button>
+                                        <button
+                                            onClick={() => deletePreset(preset.id)}
+                                            className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 transition-opacity"
+                                            title="Delete profile"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         <div className="mt-10 space-y-4">
+                            <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest px-1">Continents</h3>
                             {continents.map(cont => (
-                                <button key={cont} onClick={() => setSelectedContinent(cont)} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
+                                <button key={cont} onClick={() => setSelectedContinent(cont)} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
                                     <span>{cont}</span>
                                 </button>
                             ))}
