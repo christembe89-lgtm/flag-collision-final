@@ -30,7 +30,7 @@ export default function Game() {
     const [gameStatus, setGameStatus] = useState<'menu' | 'spawning' | 'playing' | 'winner' | 'champion'>('menu');
     const [winner, setWinner] = useState<FlagEntity | null>(null);
     const [champion, setChampion] = useState<RankingEntry | null>(null);
-    const [selectedContinent, setSelectedContinent] = useState<string>('Todos');
+    const [selectedContinent, setSelectedContinent] = useState<string>('All');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [ranking, setRanking] = useState<RankingEntry[]>([]);
     const [pointsToWin, setPointsToWin] = useState<number>(5);
@@ -596,7 +596,7 @@ export default function Game() {
                     <button
                         onClick={() => setIsDarkMode(!isDarkMode)}
                         className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
-                        title={isDarkMode ? 'Modo Claro' : 'Modo Escuro'}
+                        title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
                     >
                         {isDarkMode ? (
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -625,7 +625,7 @@ export default function Game() {
                 {/* Círculo com Bandeira - Escondido quando sidebar está aberta */}
                 <div className={`relative flex flex-col items-center transition-all duration-300 ${isSidebarOpen ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`}>
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-yellow-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-yellow-400/50 uppercase tracking-tighter">
-                        Líder
+                        Leader
                     </div>
                     <div className={`rounded-full border-[6px] flex items-center justify-center overflow-hidden transition-all duration-300 ${isDarkMode ? 'border-white/20 bg-slate-800/60' : 'border-slate-400/20 bg-slate-200/60'} shadow-2xl backdrop-blur-md bg-transparent`} style={{ width: '80px', height: '80px' }}>
                         {ranking.length > 0 ? (
@@ -636,7 +636,7 @@ export default function Game() {
                     </div>
                     {ranking.length > 0 && (
                         <div className={`mt-1 font-black text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'} drop-shadow-md`}>
-                            {ranking[0].wins} {ranking[0].wins === 1 ? 'Vitória' : 'Vitórias'}
+                            {ranking[0].wins} {ranking[0].wins === 1 ? 'Win' : 'Wins'}
                         </div>
                     )}
                 </div>
@@ -654,13 +654,13 @@ export default function Game() {
             <div className={`absolute inset-0 z-[120] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setIsSidebarOpen(false)}></div>
                 <div className={`absolute top-0 right-0 h-full w-80 ${isDarkMode ? 'bg-slate-900/90 border-white/10 text-white' : 'bg-white/90 border-slate-200 text-slate-900'} backdrop-blur-md border-l shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-8 flex flex-col`}>
-                    <h2 className="text-3xl font-black tracking-tighter mb-8 shrink-0">AJUSTES</h2>
+                    <h2 className="text-3xl font-black tracking-tighter mb-8 shrink-0">SETTINGS</h2>
 
                     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
 
                         {/* Points to Win Input */}
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Pontos para Ganhar: {tempPoints}</span>
+                            <span className="text-sm font-medium opacity-70">Points to Win: {tempPoints}</span>
                             <input
                                 type="range"
                                 min="1"
@@ -676,7 +676,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Velocidade: {gameSpeed.toFixed(1)}x</span>
+                            <span className="text-sm font-medium opacity-70">Speed: {gameSpeed.toFixed(1)}x</span>
                             <input
                                 type="range"
                                 min="0.1"
@@ -689,7 +689,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Tamanho: {((flagSize / 25) * 100).toFixed(0)}%</span>
+                            <span className="text-sm font-medium opacity-70">Size: {((flagSize / 25) * 100).toFixed(0)}%</span>
                             <input
                                 type="range"
                                 min="10"
@@ -702,7 +702,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Giro: {(rotationSpeed * 5000).toFixed(0)}%</span>
+                            <span className="text-sm font-medium opacity-70">Rotation: {(rotationSpeed * 5000).toFixed(0)}%</span>
                             <input
                                 type="range"
                                 min="0.002"
@@ -715,7 +715,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Abertura: {(gapSize * 100).toFixed(0)}%</span>
+                            <span className="text-sm font-medium opacity-70">Gap: {(gapSize * 100).toFixed(0)}%</span>
                             <input
                                 type="range"
                                 min="0.05"
@@ -728,7 +728,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Vibração: {vibrationStrength.toFixed(0)}</span>
+                            <span className="text-sm font-medium opacity-70">Vibration: {vibrationStrength.toFixed(0)}</span>
                             <input
                                 type="range"
                                 min="0"
@@ -741,7 +741,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Colisão: {collisionForce.toFixed(0)}</span>
+                            <span className="text-sm font-medium opacity-70">Collision: {collisionForce.toFixed(0)}</span>
                             <input
                                 type="range"
                                 min="5"
@@ -754,7 +754,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70 font-bold">Mostrar Nomes</span>
+                            <span className="text-sm font-medium opacity-70 font-bold">Show Names</span>
                             <button
                                 onClick={() => setShowNames(!showNames)}
                                 className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${showNames ? 'bg-indigo-600' : 'bg-slate-600'}`}
@@ -764,7 +764,7 @@ export default function Game() {
                         </div>
 
                         <div className="flex justify-between items-center mb-8">
-                            <span className="text-sm font-medium opacity-70 font-bold">Jogo Automático</span>
+                            <span className="text-sm font-medium opacity-70 font-bold">Auto Game</span>
                             <button
                                 onClick={() => setIsAutoGame(!isAutoGame)}
                                 className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${isAutoGame ? 'bg-indigo-600' : 'bg-slate-600'}`}
@@ -780,7 +780,7 @@ export default function Game() {
                             }}
                             className="w-full mt-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-all"
                         >
-                            Aplicar
+                            Apply
                         </button>
 
                         <div className="mt-10 space-y-4">
@@ -793,7 +793,7 @@ export default function Game() {
 
                     </div>
 
-                    <button onClick={() => { setIsSidebarOpen(false); initGame(); }} className="mt-8 w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all shrink-0">RECOLOCAR PAÍSES</button>
+                    <button onClick={() => { setIsSidebarOpen(false); initGame(); }} className="mt-8 w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all shrink-0">RESET FLAGS</button>
                 </div>
             </div>
 
@@ -874,7 +874,7 @@ export default function Game() {
                                     </div>
                                     <h2 className="text-2xl text-green-500 font-extrabold mb-1">GRAND CHAMPION</h2>
                                     <h1 className={`text-5xl font-black mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{champion.name}</h1>
-                                    <p className="text-xl text-green-500 font-bold mb-10">{champion.wins} Vitórias</p>
+                                    <p className="text-xl text-green-500 font-bold mb-10">{champion.wins} {champion.wins === 1 ? 'Win' : 'Wins'}</p>
 
                                     {autoCountdown !== null && (
                                         <div className="mb-6 text-2xl font-black text-green-500 animate-bounce">
@@ -882,7 +882,7 @@ export default function Game() {
                                         </div>
                                     )}
 
-                                    <button onClick={resetGame} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-xl transition-colors">Nova Competição</button>
+                                    <button onClick={resetGame} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-xl transition-colors">New Competition</button>
                                 </div>
                             )}
                         </div>
