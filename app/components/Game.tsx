@@ -13,6 +13,7 @@ interface FlagEntity {
     vy: number;
     status: 'live' | 'dead' | 'frozen';
     radius: number;
+    zIndex: number;
 }
 
 interface RankingEntry {
@@ -65,6 +66,8 @@ export default function Game() {
     const [collisionForce, setCollisionForce] = useState<number>(15);
     const [presets, setPresets] = useState<GamePreset[]>([]);
     const [newPresetName, setNewPresetName] = useState('');
+    const [soundEnabled, setSoundEnabled] = useState(true);
+    const [countrySearch, setCountrySearch] = useState('');
 
     // Flags State
     const [flags, setFlags] = useState<FlagEntity[]>([]);
@@ -83,6 +86,8 @@ export default function Game() {
     const gapSizeRef = useRef(gapSize);
     const vibrationStrengthRef = useRef(vibrationStrength);
     const collisionForceRef = useRef(collisionForce);
+    const nextZIndexRef = useRef(100);
+    const audioContextRef = useRef<AudioContext | null>(null);
 
     // Arena Constants
     const initialRadiusRef = useRef(300);
@@ -251,6 +256,7 @@ export default function Game() {
             if (championFound) {
                 setChampion(championFound);
                 setGameStatus('champion');
+                speak(`${championFound.name} is the Grand Champion!`);
             }
         }
     }, [gameStatus, winner, pointsToWin]);
@@ -296,6 +302,50 @@ export default function Game() {
             return () => clearTimeout(timer);
         }
     }, [autoCountdown, gameStatus]);
+
+    const playSound = (type: 'impact' | 'pop') => {
+        if (!soundEnabled) return;
+
+        try {
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            const ctx = audioContextRef.current;
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            if (type === 'impact') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(150, ctx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+                oscillator.start();
+                oscillator.stop(ctx.currentTime + 0.1);
+            } else {
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                oscillator.start();
+                oscillator.stop(ctx.currentTime + 0.2);
+            }
+        } catch (e) {
+            console.error('Audio error', e);
+        }
+    };
+
+    const speak = (text: string) => {
+        if (!soundEnabled) return;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 1.1;
+        window.speechSynthesis.speak(utterance);
+    };
 
     function updateArenaVisual() {
         if (arenaBgRef.current) {
@@ -377,10 +427,13 @@ export default function Game() {
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed,
                 status: 'live',
-                radius: flagSize
+                radius: flagSize,
+                zIndex: 20000 + i
             };
             newFlags.push(newFlag);
         });
+
+        speak(`Battle for the ${selectedContinent} starts now!`);
 
         flagsRef.current = newFlags;
         setFlags(newFlags);
@@ -558,6 +611,7 @@ export default function Game() {
 
                             // Visual feedback (Stain effect commented out)
                             // if (status === 'playing') createExplosion((f.x + other.x) / 2, (f.y + other.y) / 2);
+                            playSound('impact');
                         } else {
                             // Menu collisions
                             f.vx -= nx * 4;
@@ -582,6 +636,7 @@ export default function Game() {
             }
 
             el.style.transform = `translate(${f.x - f.radius}px, ${f.y - f.radius}px)`;
+            el.style.zIndex = f.zIndex.toString();
         }
 
         updateHud(currentLiveCount);
@@ -593,11 +648,14 @@ export default function Game() {
             lastLiveFlag.status = 'frozen';
             lastLiveFlag.vx = 0;
             lastLiveFlag.vy = 0;
+            speak(`${lastLiveFlag.name} wins the round!`);
         }
     };
 
     function eliminateFlag(loser: FlagEntity, assailant: FlagEntity) {
         loser.status = 'dead';
+        loser.zIndex = nextZIndexRef.current++;
+        playSound('pop');
         const el = document.getElementById(`flag-${loser.id}`);
         if (el) el.classList.add('dead');
 
@@ -652,10 +710,9 @@ export default function Game() {
         <div ref={containerRef} className={`relative w-full h-screen overflow-hidden flex items-center justify-center font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
 
             {/* Ranking Panel */}
-            <div className={`absolute top-6 left-6 z-[130] flex flex-col space-y-2 pointer-events-none transition-opacity duration-300 ${isSidebarOpen ? 'opacity-0' : 'opacity-100'}`}>
-                {/* <h3 className={`text-xl font-black italic tracking-tighter drop-shadow-md ml-4 mb-2 transition-colors ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>Ranking</h3> */}
+            <div className={`absolute top-6 left-6 z-[50000] flex flex-col space-y-2 pointer-events-none transition-opacity duration-300 ${isSidebarOpen ? 'opacity-0' : 'opacity-100'}`}>
                 <div className={`backdrop-blur-xl border rounded-[2.5rem] p-6 pr-12 min-w-[200px] shadow-2xl transition-colors ${isDarkMode ? 'bg-slate-900/40 border-white/10' : 'bg-white/60 border-slate-300/30'}`}>
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                         {ranking.length === 0 && <p className={`text-sm italic ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Waiting for battle...</p>}
                         {ranking.slice(0, 5).map((entry, i) => (
                             <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-3 group">
@@ -669,9 +726,9 @@ export default function Game() {
             </div>
 
             {/* HUD */}
-            <div className="absolute top-6 right-6 z-[131] flex flex-col items-end space-y-4 pointer-events-none">
+            <div className="absolute top-6 right-6 z-[50001] flex flex-col items-end space-y-3 pointer-events-none">
                 <div className="flex flex-row items-center space-x-4 pointer-events-auto">
-                    {/* Botão de Tema - Escondido quando sidebar está aberta */}
+                    {/* Theme Toggle - Hidden when sidebar is open */}
                     <button
                         onClick={() => setIsDarkMode(!isDarkMode)}
                         className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
@@ -688,10 +745,10 @@ export default function Game() {
                         )}
                     </button>
 
-                    {/* Botão de Menu - Sempre Visível, agora Toggles */}
+                    {/* Menu Button - Always Visible */}
                     <button
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                        className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 z-[140] ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
+                        className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
                     >
                         <div className="flex flex-col space-y-1.5 w-6">
                             <span className={`block h-0.5 w-full rounded-full transition-transform ${isSidebarOpen ? 'rotate-45 translate-y-2' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
@@ -701,8 +758,8 @@ export default function Game() {
                     </button>
                 </div>
 
-                {/* Círculo com Bandeira - Escondido quando sidebar está aberta */}
-                <div className={`relative flex flex-col items-center transition-all duration-300 ${isSidebarOpen ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`}>
+                {/* Leader Circle - Hidden when sidebar is open */}
+                <div className={`relative flex flex-col items-center transition-all duration-300 pointer-events-auto ${isSidebarOpen ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`}>
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-yellow-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-yellow-400/50 uppercase tracking-tighter">
                         Leader
                     </div>
@@ -720,8 +777,8 @@ export default function Game() {
                     )}
                 </div>
 
-                {/* Alive - Escondido quando sidebar está aberta */}
-                <div className={`flex items-center space-x-3 mt-2 transition-all duration-300 ${isSidebarOpen ? 'opacity-0 translate-x-10 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
+                {/* Alive Count - Hidden when sidebar is open */}
+                <div className={`flex items-center space-x-3 transition-all duration-300 pointer-events-auto ${isSidebarOpen ? 'opacity-0 translate-x-10 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
                     <svg className="w-8 h-8 animate-pulse" viewBox="0 0 24 24" fill="red" style={{ background: 'none' }}>
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                     </svg>
@@ -729,15 +786,15 @@ export default function Game() {
                 </div>
             </div>
 
-            {/* Sidebar */}
-            <div className={`absolute inset-0 z-[120] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+            {/* Sidebar Overlay */}
+            <div className={`absolute inset-0 z-[200000] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setIsSidebarOpen(false)}></div>
                 <div className={`absolute top-0 right-0 h-full w-80 ${isDarkMode ? 'bg-slate-900/90 border-white/10 text-white' : 'bg-white/90 border-slate-200 text-slate-900'} backdrop-blur-md border-l shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-8 flex flex-col`}>
                     <h2 className="text-3xl font-black tracking-tighter mb-8 shrink-0">SETTINGS</h2>
 
                     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
 
-                        {/* Points to Win Input */}
+                        {/* Settings Controls */}
                         <div className="flex justify-between items-center mb-6">
                             <span className="text-sm font-medium opacity-70">Points to Win: {tempPoints}</span>
                             <input
@@ -832,6 +889,17 @@ export default function Game() {
                             />
                         </div>
 
+                        {/* Toggles */}
+                        <div className="flex justify-between items-center mb-6">
+                            <span className="text-sm font-medium opacity-70 font-bold">Sound Effects</span>
+                            <button
+                                onClick={() => setSoundEnabled(!soundEnabled)}
+                                className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${soundEnabled ? 'bg-indigo-600' : 'bg-slate-600'}`}
+                            >
+                                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                            </button>
+                        </div>
+
                         <div className="flex justify-between items-center mb-6">
                             <span className="text-sm font-medium opacity-70 font-bold">Show Names</span>
                             <button
@@ -862,9 +930,9 @@ export default function Game() {
                             Apply
                         </button>
 
+                        {/* Profiles Section */}
                         <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
                             <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Profiles</h3>
-
                             <div className="flex space-x-2">
                                 <input
                                     type="text"
@@ -876,7 +944,7 @@ export default function Game() {
                                 <button
                                     onClick={saveCurrentAsPreset}
                                     className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-all active:scale-95"
-                                    title="Save current settings as profile"
+                                    title="Save as Profile"
                                 >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
@@ -888,17 +956,8 @@ export default function Game() {
                                 {presets.length === 0 && <p className="text-xs italic opacity-50 px-1">No saved profiles yet.</p>}
                                 {presets.map(preset => (
                                     <div key={preset.id} className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'}`}>
-                                        <button
-                                            onClick={() => loadPreset(preset)}
-                                            className="flex-1 text-left font-bold text-xs truncate mr-2"
-                                        >
-                                            {preset.name}
-                                        </button>
-                                        <button
-                                            onClick={() => deletePreset(preset.id)}
-                                            className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 transition-opacity"
-                                            title="Delete profile"
-                                        >
+                                        <button onClick={() => loadPreset(preset)} className="flex-1 text-left font-bold text-xs truncate mr-2">{preset.name}</button>
+                                        <button onClick={() => deletePreset(preset.id)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 transition-opacity">
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                             </svg>
@@ -908,29 +967,98 @@ export default function Game() {
                             </div>
                         </div>
 
+                        {/* Continents & Country Search */}
                         <div className="mt-10 space-y-4">
                             <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest px-1">Continents</h3>
                             {continents.map(cont => (
-                                <button key={cont} onClick={() => setSelectedContinent(cont)} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
+                                <button key={cont} onClick={() => { setSelectedContinent(cont); setCountrySearch(''); }} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
                                     <span>{cont}</span>
                                 </button>
                             ))}
                         </div>
 
+                        {selectedContinent !== 'All' && (
+                            <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
+                                <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Countries in {selectedContinent}</h3>
+                                <input
+                                    type="text"
+                                    placeholder="Search country..."
+                                    value={countrySearch}
+                                    onChange={(e) => setCountrySearch(e.target.value)}
+                                    className={`w-full bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                                />
+                                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                                    {WORLD_FLAGS
+                                        .filter(f => f.continent === (selectedContinent === 'America' ? 'Americas' : selectedContinent))
+                                        .filter(f => f.name.toLowerCase().includes(countrySearch.toLowerCase()))
+                                        .map(country => (
+                                            <div key={country.code} className={`flex items-center space-x-3 p-2 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+                                                <img src={`https://flagcdn.com/w40/${country.code}.png`} className="w-8 h-5 object-cover rounded shadow-sm" alt={country.name} />
+                                                <span className="font-bold text-xs truncate">{country.name}</span>
+                                            </div>
+                                        ))
+                                    }
+                                </div>
+                            </div>
+                        )}
                     </div>
-
                     <button onClick={() => { setIsSidebarOpen(false); initGame(); }} className="mt-8 w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all shrink-0">RESET FLAGS</button>
                 </div>
             </div>
 
-            {/* Arena */}
-            <div ref={arenaBgRef} className="absolute rounded-full transition-all duration-75 ease-linear pointer-events-none" style={{ width: '600px', height: '600px' }}>
-                {/* Visual Wall with Opening (High contrast, no shadows) */}
+            {/* Menu Overlays (Winner/Champion/Start) */}
+            {gameStatus !== 'playing' && gameStatus !== 'spawning' && (
+                <div className="absolute inset-0 z-[100000] flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                    <div className={`text-center p-8 rounded-[2.5rem] border shadow-2xl w-full max-w-sm transform scale-[0.9] ${isDarkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'}`}>
+                        {gameStatus === 'menu' && (
+                            <div className="flex flex-col items-center">
+                                <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
+                                <p className={`${isDarkMode ? 'text-slate-400' : 'text-slate-500'} text-sm mb-6`}>Points to Win: <span className="text-yellow-500 font-bold">{pointsToWin}</span></p>
+                                <button onClick={initGame} className="w-full py-5 bg-indigo-600 text-white font-bold rounded-2xl text-2xl mt-8 hover:bg-indigo-700 transition-colors">PLAY</button>
+                            </div>
+                        )}
+                        {gameStatus === 'winner' && (
+                            <div className="flex flex-col items-center">
+                                <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.4)] bg-white">
+                                    {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover" alt={winner.name} />}
+                                </div>
+                                <h2 className="text-2xl text-yellow-500 font-extrabold mb-1">ROUND CHAMPION</h2>
+                                <h1 className={`text-5xl font-black mb-10 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{winner?.name}</h1>
+                                {autoCountdown !== null && (
+                                    <div className="mb-6 text-2xl font-black text-indigo-500 animate-bounce">
+                                        {autoCountdown === 0 ? 'START!' : autoCountdown}
+                                    </div>
+                                )}
+                                <button onClick={() => { setWinner(null); initGame(); }} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl text-xl transition-colors">Play Again</button>
+                            </div>
+                        )}
+                        {gameStatus === 'champion' && champion && (
+                            <div className="flex flex-col items-center">
+                                <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-green-400 shadow-[0_0_50px_rgba(34,197,94,0.4)] bg-white">
+                                    <img src={`https://flagcdn.com/w320/${champion.code}.png`} className="w-full h-full object-cover" />
+                                </div>
+                                <h2 className="text-2xl text-green-500 font-extrabold mb-1">GRAND CHAMPION</h2>
+                                <h1 className={`text-5xl font-black mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{champion.name}</h1>
+                                <p className="text-xl text-green-500 font-bold mb-10">{champion?.wins} {champion?.wins === 1 ? 'Win' : 'Wins'}</p>
+                                {autoCountdown !== null && (
+                                    <div className="mb-6 text-2xl font-black text-green-500 animate-bounce">
+                                        {autoCountdown === 0 ? 'GO!' : autoCountdown}
+                                    </div>
+                                )}
+                                <button onClick={resetGame} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-xl transition-colors">New Competition</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Arena Background */}
+            <div ref={arenaBgRef} className="absolute rounded-full transition-all duration-75 ease-linear pointer-events-none z-[1]" style={{ width: '600px', height: '600px' }}>
                 <div className={`arena-wall absolute inset-0 rounded-full border-[10px] transition-colors duration-300 ${isDarkMode ? 'border-indigo-500' : 'border-indigo-400'}`}></div>
             </div>
 
             {/* Flags Container */}
-            <div ref={flagsContainerRef} className="absolute top-0 left-0 w-full h-full pointer-events-none">
+            <div ref={flagsContainerRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-[10]">
                 {flags.map((f) => (
                     <div
                         key={f.id}
@@ -956,65 +1084,6 @@ export default function Game() {
                     </div>
                 ))}
             </div>
-
-            {/* Menus */}
-            {
-                gameStatus !== 'playing' && gameStatus !== 'spawning' && (
-                    <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-                        <div className={`text-center p-8 rounded-[2.5rem] border shadow-2xl w-full max-w-sm transform scale-[0.9] ${isDarkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'}`}>
-                            {gameStatus === 'menu' && (
-                                <div className="flex flex-col items-center">
-                                    <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
-                                    <p className={`${isDarkMode ? 'text-slate-400' : 'text-slate-500'} text-sm mb-6`}>Points to Win: <span className="text-yellow-500 font-bold">{pointsToWin}</span></p>
-                                    <button onClick={initGame} className="w-full py-5 bg-indigo-600 text-white font-bold rounded-2xl text-2xl mt-8 hover:bg-indigo-700 transition-colors">PLAY</button>
-                                </div>
-                            )}
-                            {gameStatus === 'winner' && (
-                                <div className="flex flex-col items-center">
-                                    <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.4)] bg-white">
-                                        {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover" alt={winner.name} />}
-                                    </div>
-                                    <h2 className="text-2xl text-yellow-500 font-extrabold mb-1">ROUND CHAMPION</h2>
-                                    <h1 className={`text-5xl font-black mb-10 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{winner?.name}</h1>
-
-                                    {autoCountdown !== null && (
-                                        <div className="mb-6 text-2xl font-black text-indigo-500 animate-bounce">
-                                            {autoCountdown === 0 ? 'START!' : autoCountdown}
-                                        </div>
-                                    )}
-
-                                    <button onClick={() => {
-                                        setWinner(null);
-                                        flagsRef.current = [];
-                                        setFlags([]);
-                                        arenaRadiusRef.current = initialRadiusRef.current;
-                                        updateArenaVisual();
-                                        initGame();
-                                    }} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl text-xl transition-colors">Play Again</button>
-                                </div>
-                            )}
-                            {gameStatus === 'champion' && champion && (
-                                <div className="flex flex-col items-center">
-                                    <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-green-400 shadow-[0_0_50px_rgba(34,197,94,0.4)] bg-white">
-                                        <img src={`https://flagcdn.com/w320/${champion.code}.png`} className="w-full h-full object-cover" />
-                                    </div>
-                                    <h2 className="text-2xl text-green-500 font-extrabold mb-1">GRAND CHAMPION</h2>
-                                    <h1 className={`text-5xl font-black mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{champion.name}</h1>
-                                    <p className="text-xl text-green-500 font-bold mb-10">{champion.wins} {champion.wins === 1 ? 'Win' : 'Wins'}</p>
-
-                                    {autoCountdown !== null && (
-                                        <div className="mb-6 text-2xl font-black text-green-500 animate-bounce">
-                                            {autoCountdown === 0 ? 'GO!' : autoCountdown}
-                                        </div>
-                                    )}
-
-                                    <button onClick={resetGame} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-xl transition-colors">New Competition</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )
-            }
         </div>
     );
 }
