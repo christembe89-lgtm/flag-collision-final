@@ -627,8 +627,10 @@ export default function Game() {
                 f.x += f.vx * speedMult;
                 f.y += f.vy * speedMult;
                 const floorY = gameBoundsRef.current.height;
-                if (f.y + f.radius > floorY) {
-                    f.y = floorY - f.radius;
+                // Add a small individual offset based on ID to create a "pile" look
+                const individualFloorY = floorY - (f.id % 5) * 4;
+                if (f.y + f.radius > individualFloorY) {
+                    f.y = individualFloorY - f.radius;
                     f.vy *= -0.4; f.vx *= 0.8;
                 }
                 if (f.x - f.radius < 0) { f.x = f.radius; f.vx *= -0.5; }
@@ -658,6 +660,9 @@ export default function Game() {
         playSound('pop');
         const el = document.getElementById(`flag-${loser.id}`);
         if (el) el.classList.add('dead');
+
+        // Sync to React state to prevent re-renders from clobbering zIndex/status
+        setFlags(prev => prev.map(f => f.id === loser.id ? { ...loser } : f));
 
         // If it's a gap exit (assailant is itself), reduce momentum
         if (loser.id === assailant.id) {
@@ -1068,6 +1073,7 @@ export default function Game() {
                             width: `${flagSize * 2}px`,
                             height: `${flagSize * 2}px`,
                             position: 'absolute',
+                            zIndex: f.zIndex,
                             animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                             willChange: 'transform',
                             display: f.x < 10 || f.y < 10 ? 'none' : 'block'
@@ -1077,7 +1083,7 @@ export default function Game() {
                             <img src={`https://flagcdn.com/w160/${f.code}.png`} alt={f.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </div>
                         {showNames && (
-                            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm name-label z-20 opacity-100">
+                            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm name-label z-[25] opacity-100">
                                 {f.name}
                             </div>
                         )}
