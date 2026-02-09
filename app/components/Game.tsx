@@ -14,6 +14,7 @@ interface FlagEntity {
     status: 'live' | 'dead' | 'frozen';
     radius: number;
     zIndex: number;
+    shape: 'circle' | 'rect';
 }
 
 interface RankingEntry {
@@ -68,6 +69,7 @@ export default function Game() {
     const [newPresetName, setNewPresetName] = useState('');
     const [soundEnabled, setSoundEnabled] = useState(true);
     const [countrySearch, setCountrySearch] = useState('');
+    const [flagShape, setFlagShape] = useState<'circle' | 'rect'>('circle');
 
     // Flags State
     const [flags, setFlags] = useState<FlagEntity[]>([]);
@@ -428,7 +430,8 @@ export default function Game() {
                 vy: Math.sin(angle) * speed,
                 status: 'live',
                 radius: flagSize,
-                zIndex: 20000 + i
+                zIndex: 20000 + i,
+                shape: flagShape
             };
             newFlags.push(newFlag);
         });
@@ -637,7 +640,11 @@ export default function Game() {
                 else if (f.x + f.radius > gameBoundsRef.current.width) { f.x = gameBoundsRef.current.width - f.radius; f.vx *= -0.5; }
             }
 
-            el.style.transform = `translate(${f.x - f.radius}px, ${f.y - f.radius}px)`;
+            const isRect = flagShape === 'rect';
+            const w = isRect ? flagSize * 2.8 : flagSize * 2;
+            const h = isRect ? flagSize * 1.8 : flagSize * 2;
+
+            el.style.transform = `translate(${f.x - w / 2}px, ${f.y - h / 2}px)`;
             el.style.zIndex = f.zIndex.toString();
         }
 
@@ -925,6 +932,24 @@ export default function Game() {
                             </button>
                         </div>
 
+                        <div className="flex justify-between items-center mb-10 p-4 rounded-2xl bg-white/5 border border-white/10">
+                            <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Flag Shape</span>
+                            <div className="flex bg-slate-800 rounded-xl p-1">
+                                <button
+                                    onClick={() => setFlagShape('circle')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'circle' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    CIRCLE
+                                </button>
+                                <button
+                                    onClick={() => setFlagShape('rect')}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'rect' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    RECT
+                                </button>
+                            </div>
+                        </div>
+
                         <button
                             onClick={() => {
                                 setPointsToWin(tempPoints);
@@ -1064,31 +1089,38 @@ export default function Game() {
 
             {/* Flags Container */}
             <div ref={flagsContainerRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-[10]">
-                {flags.map((f) => (
-                    <div
-                        key={f.id}
-                        id={`flag-${f.id}`}
-                        className={`flag-entity rounded-full bg-transparent ${isDarkMode ? 'shadow-lg' : 'shadow-sm'} text-center ${f.status === 'dead' ? 'dead' : ''}`}
-                        style={{
-                            width: `${flagSize * 2}px`,
-                            height: `${flagSize * 2}px`,
-                            position: 'absolute',
-                            zIndex: f.zIndex,
-                            animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                            willChange: 'transform',
-                            display: f.x < 10 || f.y < 10 ? 'none' : 'block'
-                        }}
-                    >
-                        <div className={`w-full h-full rounded-full overflow-hidden border-2 relative z-10 box-border bg-transparent ${isDarkMode ? 'border-white/80' : 'border-slate-400/20'}`}>
-                            <img src={`https://flagcdn.com/w160/${f.code}.png`} alt={f.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </div>
-                        {showNames && (
-                            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm name-label z-[25] opacity-100">
-                                {f.name}
+                {flags.map((f) => {
+                    const isRect = flagShape === 'rect';
+                    const w = isRect ? flagSize * 2.8 : flagSize * 2;
+                    const h = isRect ? flagSize * 1.8 : flagSize * 2;
+
+                    return (
+                        <div
+                            key={f.id}
+                            id={`flag-${f.id}`}
+                            className={`flag-entity ${isRect ? 'rounded-lg' : 'rounded-full'} bg-transparent ${isDarkMode ? 'shadow-xl' : 'shadow-md'} text-center ${f.status === 'dead' ? 'dead' : ''}`}
+                            style={{
+                                width: `${w}px`,
+                                height: `${h}px`,
+                                position: 'absolute',
+                                zIndex: f.zIndex,
+                                transform: `translate(${f.x - w / 2}px, ${f.y - h / 2}px)`,
+                                animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                                willChange: 'transform',
+                                display: f.x < 10 || f.y < 10 ? 'none' : 'block'
+                            }}
+                        >
+                            <div className={`w-full h-full ${isRect ? 'rounded-lg' : 'rounded-full'} overflow-hidden border-2 relative z-10 box-border bg-transparent ${isDarkMode ? 'border-white/80' : 'border-slate-400/20'}`}>
+                                <img src={`https://flagcdn.com/w160/${f.code}.png`} alt={f.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
-                        )}
-                    </div>
-                ))}
+                            {showNames && (
+                                <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm name-label z-[25] opacity-100">
+                                    {f.name}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
