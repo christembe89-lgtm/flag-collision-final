@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { WORLD_FLAGS, Country } from '../data/countries';
+import { VICTORY_THEMES, getVictoryTheme, VictoryTheme } from '../data/victoryThemes';
 
 interface FlagEntity {
     id: number;
@@ -38,6 +39,7 @@ interface GamePreset {
         isAutoGame: boolean;
         vibrationStrength: number;
         collisionForce: number;
+        showVictoryBackgrounds: boolean;
     };
 }
 
@@ -70,6 +72,8 @@ export default function Game() {
     const [soundEnabled, setSoundEnabled] = useState(true);
     const [countrySearch, setCountrySearch] = useState('');
     const [flagShape, setFlagShape] = useState<'circle' | 'rect'>('circle');
+    const [showVictoryBackgrounds, setShowVictoryBackgrounds] = useState<boolean>(true);
+    const [activeVictoryTheme, setActiveVictoryTheme] = useState<VictoryTheme | null>(null);
 
     // Flags State
     const [flags, setFlags] = useState<FlagEntity[]>([]);
@@ -190,7 +194,8 @@ export default function Game() {
                 showNames,
                 isAutoGame,
                 vibrationStrength,
-                collisionForce
+                collisionForce,
+                showVictoryBackgrounds
             }
         };
 
@@ -210,7 +215,9 @@ export default function Game() {
         setShowNames(s.showNames);
         setIsAutoGame(s.isAutoGame);
         setVibrationStrength(s.vibrationStrength);
+        setVibrationStrength(s.vibrationStrength);
         setCollisionForce(s.collisionForce);
+        setShowVictoryBackgrounds(s.showVictoryBackgrounds ?? true);
     };
 
     const deletePreset = (id: string) => {
@@ -258,6 +265,8 @@ export default function Game() {
             if (championFound) {
                 setChampion(championFound);
                 setGameStatus('champion');
+                const countryData = WORLD_FLAGS.find(c => c.code === championFound.code);
+                setActiveVictoryTheme(getVictoryTheme(championFound.code, countryData?.continent));
                 speak(`${championFound.name} is the Grand Champion!`);
             }
         }
@@ -652,6 +661,8 @@ export default function Game() {
         if (currentLiveCount <= 1 && flags.length > 1 && status === 'playing' && lastLiveFlag) {
             setGameStatus('winner');
             setWinner({ ...lastLiveFlag });
+            const countryData = WORLD_FLAGS.find(c => c.code === lastLiveFlag.code);
+            setActiveVictoryTheme(getVictoryTheme(lastLiveFlag.code, countryData?.continent));
 
             // Freeze the winning flag
             lastLiveFlag.status = 'frozen';
@@ -707,7 +718,7 @@ export default function Game() {
     };
     */
 
-    const continents = ['All', 'Africa', 'America', 'Asia', 'Europe', 'Oceania'];
+    const continents = ['All', 'Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
 
     // Adicione este useEffect para sincronizar o tema com o documento
     useEffect(() => {
@@ -999,6 +1010,16 @@ export default function Game() {
 
                         {/* Continents & Country Search */}
                         <div className="mt-10 space-y-4">
+                            <div className="flex items-center justify-between px-1 mb-4">
+                                <label className="text-sm font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Victory Backgrounds</label>
+                                <button
+                                    onClick={() => setShowVictoryBackgrounds(!showVictoryBackgrounds)}
+                                    className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${showVictoryBackgrounds ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                                >
+                                    <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${showVictoryBackgrounds ? 'translate-x-4' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+
                             <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest px-1">Continents</h3>
                             {continents.map(cont => (
                                 <button key={cont} onClick={() => { setSelectedContinent(cont); setCountrySearch(''); }} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
@@ -1038,8 +1059,22 @@ export default function Game() {
 
             {/* Menu Overlays (Winner/Champion/Start) */}
             {gameStatus !== 'playing' && gameStatus !== 'spawning' && (
-                <div className="absolute inset-0 z-[100000] flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
-                    <div className={`text-center p-8 rounded-[2.5rem] border shadow-2xl w-full max-w-sm transform scale-[0.9] ${isDarkMode ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-200'}`}>
+                <div className="absolute inset-0 z-[100000] flex items-center justify-center overflow-hidden">
+                    {/* Full Screen Cultural Background */}
+                    {(gameStatus === 'winner' || gameStatus === 'champion') && showVictoryBackgrounds && activeVictoryTheme?.backgroundImage && (
+                        <div
+                            className="absolute inset-0 z-0 animate-fade-in"
+                            style={{
+                                backgroundImage: `url(${activeVictoryTheme.backgroundImage})`,
+                                backgroundSize: 'cover',
+                                backgroundPosition: 'center',
+                                filter: 'brightness(0.6)'
+                            }}
+                        />
+                    )}
+                    <div className={`absolute inset-0 bg-black/30 backdrop-blur-[2px] z-[1]`}></div>
+
+                    <div className={`text-center p-8 rounded-[3rem] border border-white/50 shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] w-full max-w-sm transform scale-[0.85] z-50 bg-white/95 backdrop-blur-xl transition-all duration-500`}>
                         {gameStatus === 'menu' && (
                             <div className="flex flex-col items-center">
                                 <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
@@ -1048,34 +1083,102 @@ export default function Game() {
                             </div>
                         )}
                         {gameStatus === 'winner' && (
-                            <div className="flex flex-col items-center">
-                                <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.4)] bg-white">
-                                    {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover" alt={winner.name} />}
+                            <div className="flex flex-col items-center relative overflow-hidden">
+                                {/* Cultural Background Elements */}
+                                <div className="absolute inset-0 pointer-events-none opacity-20">
+                                    <div className="absolute top-0 left-0 text-8xl animate-pulse">{activeVictoryTheme?.symbol}</div>
+                                    <div className="absolute bottom-0 right-0 text-8xl animate-bounce">{activeVictoryTheme?.symbol}</div>
                                 </div>
-                                <h2 className="text-2xl text-yellow-500 font-extrabold mb-1">ROUND CHAMPION</h2>
-                                <h1 className={`text-5xl font-black mb-10 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{winner?.name}</h1>
+
+                                <div className="w-44 h-44 mb-6 rounded-full overflow-hidden border-[10px] shadow-2xl bg-white relative z-10 mx-auto" style={{ borderColor: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                    {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover scale-110" alt={winner.name} />}
+                                </div>
+
+                                <h2 className="text-sm font-black mb-1 tracking-[0.2em] uppercase" style={{ color: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                    {activeVictoryTheme?.celebration || 'ROUND CHAMPION'}
+                                </h2>
+                                <h1 className="text-5xl font-black mb-6 text-slate-900 drop-shadow-sm text-center">
+                                    {winner?.name}
+                                </h1>
+
+                                {/* Cultural Insight Section - Light Grey as per Mockup */}
+                                <div className="w-full p-5 rounded-3xl mb-8 bg-slate-50 border border-slate-100 shadow-inner">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 italic">Culture & Spirit</p>
+                                    <div className="flex items-center space-x-4">
+                                        <div className="text-4xl filter drop-shadow-sm">{activeVictoryTheme?.symbol}</div>
+                                        <div className="text-left">
+                                            <p className="text-sm font-black leading-tight uppercase text-slate-800">{activeVictoryTheme?.action}</p>
+                                            <p className="text-[11px] text-slate-500 font-bold mt-0.5">{activeVictoryTheme?.landscape}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {autoCountdown !== null && (
-                                    <div className="mb-6 text-2xl font-black text-indigo-500 animate-bounce">
+                                    <div className="mb-6 text-2xl font-black animate-bounce" style={{ color: activeVictoryTheme?.colors[0] || '#6366f1' }}>
                                         {autoCountdown === 0 ? 'START!' : autoCountdown}
                                     </div>
                                 )}
-                                <button onClick={() => { setWinner(null); initGame(); }} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl text-xl transition-colors">Play Again</button>
+
+                                <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+                                    {[...Array(20)].map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className="absolute animate-celebrate-particle opacity-0"
+                                            style={{
+                                                left: `${Math.random() * 100}%`,
+                                                top: `${Math.random() * 100}%`,
+                                                animationDelay: `${Math.random() * 3}s`,
+                                                fontSize: `${Math.random() * 20 + 20}px`
+                                            }}
+                                        >
+                                            {activeVictoryTheme?.symbol}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button
+                                    onClick={() => { setWinner(null); setActiveVictoryTheme(null); initGame(); }}
+                                    className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2"
+                                >
+                                    <span>Victory Celebration!</span>
+                                </button>
                             </div>
                         )}
                         {gameStatus === 'champion' && champion && (
-                            <div className="flex flex-col items-center">
-                                <div className="w-40 h-40 mb-6 rounded-full overflow-hidden border-8 border-green-400 shadow-[0_0_50px_rgba(34,197,94,0.4)] bg-white">
-                                    <img src={`https://flagcdn.com/w320/${champion.code}.png`} className="w-full h-full object-cover" />
+                            <div className="flex flex-col items-center relative transition-all duration-700">
+                                <div className="w-48 h-48 mb-6 rounded-full overflow-hidden border-[12px] shadow-2xl bg-white relative z-10 mx-auto" style={{ borderColor: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                    <img src={`https://flagcdn.com/w320/${champion.code}.png`} className="w-full h-full object-cover scale-110" alt={champion.name} />
                                 </div>
-                                <h2 className="text-2xl text-green-500 font-extrabold mb-1">GRAND CHAMPION</h2>
-                                <h1 className={`text-5xl font-black mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{champion.name}</h1>
-                                <p className="text-xl text-green-500 font-bold mb-10">{champion?.wins} {champion?.wins === 1 ? 'Win' : 'Wins'}</p>
-                                {autoCountdown !== null && (
-                                    <div className="mb-6 text-2xl font-black text-green-500 animate-bounce">
-                                        {autoCountdown === 0 ? 'GO!' : autoCountdown}
+
+                                <h2 className="text-sm font-black mb-1 tracking-[0.3em] uppercase" style={{ color: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                    {activeVictoryTheme?.celebration.toUpperCase() || 'GRAND CHAMPION'}
+                                </h2>
+                                <h1 className="text-6xl font-black mb-2 text-slate-900 drop-shadow-sm text-center">
+                                    {champion.name}
+                                </h1>
+                                <p className="text-2xl font-bold mb-8 text-slate-500">
+                                    {champion?.wins} {champion?.wins === 1 ? 'Victory' : 'Victories'}
+                                </p>
+
+                                {/* Deep Cultural Insight */}
+                                <div className="w-full p-6 rounded-[2.5rem] mb-10 bg-slate-50 border border-slate-100 shadow-inner">
+                                    <div className="flex flex-col space-y-4">
+                                        <div className="flex items-center space-x-5">
+                                            <div className="text-5xl filter drop-shadow-md">{activeVictoryTheme?.symbol}</div>
+                                            <div className="text-left">
+                                                <p className="text-lg font-black leading-tight uppercase text-slate-800">{activeVictoryTheme?.action}</p>
+                                                <p className="text-sm text-slate-500 font-bold mt-1 italic">{activeVictoryTheme?.landscape}</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
-                                <button onClick={resetGame} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl text-xl transition-colors">New Competition</button>
+                                </div>
+
+                                <button
+                                    onClick={resetGame}
+                                    className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-2xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 shadow-green-200"
+                                >
+                                    NEW COMPETITION
+                                </button>
                             </div>
                         )}
                     </div>
