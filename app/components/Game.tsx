@@ -749,7 +749,7 @@ export default function Game() {
             </div>
 
             {/* HUD */}
-            <div className="absolute top-6 right-6 z-[50001] flex flex-col items-end space-y-3 pointer-events-none">
+            <div className="absolute top-6 right-6 z-[200001] flex flex-col items-end space-y-3 pointer-events-none">
                 <div className="flex flex-row items-center space-x-4 pointer-events-auto">
                     {/* Theme Toggle - Hidden when sidebar is open */}
                     <button
