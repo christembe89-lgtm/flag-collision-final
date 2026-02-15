@@ -758,15 +758,15 @@ export default function Game() {
         <div ref={containerRef} className={`relative w-full h-screen overflow-hidden flex items-center justify-center font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
 
             {/* Ranking Panel */}
-            <div className={`absolute top-6 left-6 z-[50000] flex flex-col space-y-2 pointer-events-none transition-opacity duration-300 ${isSidebarOpen ? 'opacity-0' : 'opacity-100'}`}>
-                <div className={`backdrop-blur-xl border rounded-[2.5rem] p-6 pr-12 min-w-[200px] shadow-2xl transition-colors ${isDarkMode ? 'bg-slate-900/40 border-white/10' : 'bg-white/60 border-slate-300/30'}`}>
-                    <div className="space-y-2">
-                        {ranking.length === 0 && <p className={`text-sm italic ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Waiting for battle...</p>}
+            <div className={`absolute ${isMobile ? 'top-2 left-2' : 'top-6 left-6'} z-[50000] flex flex-col space-y-2 pointer-events-none transition-all duration-300 ${isSidebarOpen ? 'opacity-0' : 'opacity-100'}`}>
+                <div className={`backdrop-blur-xl border rounded-[2rem] ${isMobile ? 'p-3 pr-6 min-w-[140px]' : 'p-6 pr-12 min-w-[200px]'} shadow-2xl transition-all ${isDarkMode ? 'bg-slate-900/40 border-white/10' : 'bg-white/60 border-slate-300/30'}`}>
+                    <div className="space-y-1">
+                        {ranking.length === 0 && <p className={`text-xs italic ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Waiting...</p>}
                         {ranking.slice(0, 5).map((entry, i) => (
-                            <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-3 group">
-                                <span className={`font-bold text-lg w-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{i + 1}.</span>
-                                <span className={`font-black text-sm tracking-tight drop-shadow-sm truncate max-w-[120px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{entry.name}</span>
-                                <span className={`font-bold text-sm ml-auto ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>{entry.wins}/{pointsToWin}</span>
+                            <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-2 group">
+                                <span className={`font-bold ${isMobile ? 'text-sm' : 'text-lg'} w-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{i + 1}.</span>
+                                <span className={`font-black ${isMobile ? 'text-xs' : 'text-sm'} tracking-tight drop-shadow-sm truncate max-w-[100px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{entry.name}</span>
+                                <span className={`font-bold ${isMobile ? 'text-xs' : 'text-sm'} ml-auto ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>{entry.wins}/{pointsToWin}</span>
                             </div>
                         ))}
                     </div>
@@ -774,20 +774,20 @@ export default function Game() {
             </div>
 
             {/* HUD */}
-            <div className="absolute top-6 right-6 z-[200001] flex flex-col items-end space-y-3 pointer-events-none">
-                <div className="flex flex-row items-center space-x-4 pointer-events-auto">
+            <div className={`absolute ${isMobile ? 'top-2 right-2' : 'top-6 right-6'} z-[200001] flex flex-col items-end space-y-3 pointer-events-none transition-all duration-300`}>
+                <div className="flex flex-row items-center space-x-2 pointer-events-auto">
                     {/* Theme Toggle - Hidden when sidebar is open */}
                     <button
                         onClick={() => setIsDarkMode(!isDarkMode)}
-                        className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
+                        className={`${isMobile ? 'p-2 rounded-2xl' : 'p-4 rounded-3xl'} border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
                         title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
                     >
                         {isDarkMode ? (
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1m-16 0H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                             </svg>
                         ) : (
-                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                            <svg className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                             </svg>
                         )}
@@ -796,9 +796,9 @@ export default function Game() {
                     {/* Menu Button - Always Visible */}
                     <button
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                        className={`p-4 rounded-3xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
+                        className={`${isMobile ? 'p-2 rounded-2xl' : 'p-4 rounded-3xl'} border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
                     >
-                        <div className="flex flex-col space-y-1.5 w-6">
+                        <div className={`flex flex-col space-y-1.5 ${isMobile ? 'w-5' : 'w-6'}`}>
                             <span className={`block h-0.5 w-full rounded-full transition-transform ${isSidebarOpen ? 'rotate-45 translate-y-2' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
                             <span className={`block h-0.5 w-full rounded-full transition-opacity ${isSidebarOpen ? 'opacity-0' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
                             <span className={`block h-0.5 w-full rounded-full transition-transform ${isSidebarOpen ? '-rotate-45 -translate-y-2' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
@@ -811,7 +811,7 @@ export default function Game() {
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-yellow-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-yellow-400/50 uppercase tracking-tighter">
                         Leader
                     </div>
-                    <div className={`rounded-full border-[6px] flex items-center justify-center overflow-hidden transition-all duration-300 ${isDarkMode ? 'border-white/20 bg-slate-800/60' : 'border-slate-400/20 bg-slate-200/60'} shadow-2xl backdrop-blur-md bg-transparent`} style={{ width: '80px', height: '80px' }}>
+                    <div className={`rounded-full border-[6px] flex items-center justify-center overflow-hidden transition-all duration-300 ${isDarkMode ? 'border-white/20 bg-slate-800/60' : 'border-slate-400/20 bg-slate-200/60'} shadow-2xl backdrop-blur-md bg-transparent`} style={{ width: isMobile ? '60px' : '80px', height: isMobile ? '60px' : '80px' }}>
                         {ranking.length > 0 ? (
                             <img src={`https://flagcdn.com/w160/${ranking[0].code}.png`} className="w-full h-full object-cover bg-transparent" alt={ranking[0].name} />
                         ) : (
@@ -819,7 +819,7 @@ export default function Game() {
                         )}
                     </div>
                     {ranking.length > 0 && (
-                        <div className={`mt-1 font-black text-xs ${isDarkMode ? 'text-white' : 'text-slate-900'} drop-shadow-md`}>
+                        <div className={`mt-1 font-black ${isMobile ? 'text-[10px]' : 'text-xs'} ${isDarkMode ? 'text-white' : 'text-slate-900'} drop-shadow-md`}>
                             {ranking[0].wins} {ranking[0].wins === 1 ? 'Win' : 'Wins'}
                         </div>
                     )}
@@ -827,17 +827,17 @@ export default function Game() {
 
                 {/* Alive Count - Hidden when sidebar is open */}
                 <div className={`flex items-center space-x-3 transition-all duration-300 pointer-events-auto ${isSidebarOpen ? 'opacity-0 translate-x-10 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
-                    <svg className="w-8 h-8 animate-pulse" viewBox="0 0 24 24" fill="red" style={{ background: 'none' }}>
+                    <svg className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8'} animate-pulse`} viewBox="0 0 24 24" fill="red" style={{ background: 'none' }}>
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                     </svg>
-                    <span ref={hudRef} className="font-black text-3xl tabular-nums text-green-400">{flags.filter(f => f.status === 'live').length}</span>
+                    <span ref={hudRef} className={`font-black ${isMobile ? 'text-xl' : 'text-3xl'} tabular-nums text-green-400`}>{flags.filter(f => f.status === 'live').length}</span>
                 </div>
             </div>
 
             {/* Sidebar Overlay */}
             <div className={`absolute inset-0 z-[200000] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setIsSidebarOpen(false)}></div>
-                <div className={`absolute top-0 right-0 h-full w-80 ${isDarkMode ? 'bg-slate-900/90 border-white/10 text-white' : 'bg-white/90 border-slate-200 text-slate-900'} backdrop-blur-md border-l shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-8 flex flex-col`}>
+                <div className={`absolute top-0 right-0 h-full ${isMobile ? 'w-full max-w-xs' : 'w-80'} ${isDarkMode ? 'bg-slate-900/95 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900'} backdrop-blur-xl border-l shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-8 flex flex-col`}>
                     <h2 className="text-3xl font-black tracking-tighter mb-8 shrink-0">SETTINGS</h2>
 
                     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
