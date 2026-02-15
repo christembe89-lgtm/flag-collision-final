@@ -75,6 +75,10 @@ export default function Game() {
     const [showVictoryBackgrounds, setShowVictoryBackgrounds] = useState<boolean>(true);
     const [activeVictoryTheme, setActiveVictoryTheme] = useState<VictoryTheme | null>(null);
 
+    // Device Mode State
+    const [deviceMode, setDeviceMode] = useState<'auto' | 'mobile' | 'desktop'>('auto');
+    const [isMobile, setIsMobile] = useState(false);
+
     // Flags State
     const [flags, setFlags] = useState<FlagEntity[]>([]);
 
@@ -114,6 +118,27 @@ export default function Game() {
     useEffect(() => {
         gameSpeedRef.current = gameSpeed;
     }, [gameSpeed]);
+
+    // Handle Device Mode Changes
+    useEffect(() => {
+        const checkMobile = () => {
+            if (deviceMode === 'auto') {
+                return window.innerWidth < 768; // Standard mobile breakpoint
+            }
+            return deviceMode === 'mobile';
+        };
+
+        const mobile = checkMobile();
+        setIsMobile(mobile);
+
+        // Apply optimizations
+        if (mobile) {
+            setFlagSize(25); // Larger flags for mobile (was 18.75)
+            // setGameSpeed(0.8); // Slightly slower for better control? Optional.
+        } else {
+            setFlagSize(18.75); // Standard desktop size
+        }
+    }, [deviceMode]);
 
     useEffect(() => {
         flagSizeRef.current = flagSize;
@@ -941,6 +966,22 @@ export default function Game() {
                             >
                                 <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isAutoGame ? 'translate-x-6' : 'translate-x-0'}`}></div>
                             </button>
+                        </div>
+
+                        {/* Device Mode Selector */}
+                        <div className="flex justify-between items-center mb-8 p-4 rounded-2xl bg-white/5 border border-white/10">
+                            <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Device Mode</span>
+                            <div className="flex bg-slate-800 rounded-xl p-1">
+                                {(['auto', 'mobile', 'desktop'] as const).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        onClick={() => setDeviceMode(mode)}
+                                        className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${deviceMode === mode ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        {mode}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         <div className="flex justify-between items-center mb-10 p-4 rounded-2xl bg-white/5 border border-white/10">
