@@ -134,11 +134,52 @@ export default function Game() {
         // Apply optimizations
         if (mobile) {
             setFlagSize(25); // Larger flags for mobile (was 18.75)
-            // setGameSpeed(0.8); // Slightly slower for better control? Optional.
         } else {
             setFlagSize(18.75); // Standard desktop size
         }
+
+        // Delay to allow container to transition size before recalculating bounds
+        setTimeout(() => {
+            handleResize();
+        }, 300);
     }, [deviceMode]);
+
+    const handleResize = () => {
+        if (containerRef.current) {
+            const { clientWidth, clientHeight } = containerRef.current;
+
+            const oldWidth = gameBoundsRef.current.width || clientWidth;
+            const oldHeight = gameBoundsRef.current.height || clientHeight;
+
+            gameBoundsRef.current = {
+                width: clientWidth,
+                height: clientHeight,
+                centerX: clientWidth / 2,
+                centerY: clientHeight / 2
+            };
+
+            const maxSize = Math.min(clientWidth, clientHeight) * 0.42;
+            const ratio = maxSize / initialRadiusRef.current;
+
+            // Proportional scaling for mid-game transitions
+            if (!isNaN(ratio) && isFinite(ratio)) {
+                arenaRadiusRef.current *= ratio;
+            }
+
+            initialRadiusRef.current = maxSize;
+            updateArenaVisual();
+
+            // Also reposition flags relative to center if mid-game
+            if (gameStatusRef.current === 'playing' || gameStatusRef.current === 'spawning') {
+                flagsRef.current.forEach(f => {
+                    const dx = f.x - (oldWidth / 2);
+                    const dy = f.y - (oldHeight / 2);
+                    f.x = (clientWidth / 2) + (dx * ratio);
+                    f.y = (clientHeight / 2) + (dy * ratio);
+                });
+            }
+        }
+    };
 
     useEffect(() => {
         flagSizeRef.current = flagSize;
@@ -167,20 +208,6 @@ export default function Game() {
 
     // Resize Handler
     useEffect(() => {
-        const handleResize = () => {
-            if (containerRef.current) {
-                const { clientWidth, clientHeight } = containerRef.current;
-                gameBoundsRef.current = {
-                    width: clientWidth,
-                    height: clientHeight,
-                    centerX: clientWidth / 2,
-                    centerY: clientHeight / 2
-                };
-                const maxSize = Math.min(clientWidth, clientHeight) * 0.45;
-                initialRadiusRef.current = maxSize;
-                updateArenaVisual();
-            }
-        };
         window.addEventListener('resize', handleResize);
         setTimeout(handleResize, 100);
         const savedPresets = localStorage.getItem('flagRoyale_presets');
@@ -412,8 +439,8 @@ export default function Game() {
         if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
 
-        if (!containerRef.current || containerRef.current.clientWidth < 100) {
-            console.log('Waiting for layout...');
+        if (!containerRef.current) {
+            console.log('Waiting for container...');
             setTimeout(initGame, 100);
             return;
         }
@@ -425,11 +452,14 @@ export default function Game() {
         updateHud(0);
 
         const { clientWidth, clientHeight } = containerRef.current;
+        const width = clientWidth || (isMobile ? 430 : window.innerWidth);
+        const height = clientHeight || (isMobile ? 932 : window.innerHeight);
+
         gameBoundsRef.current = {
-            width: clientWidth,
-            height: clientHeight,
-            centerX: clientWidth / 2,
-            centerY: clientHeight / 2
+            width,
+            height,
+            centerX: width / 2,
+            centerY: height / 2
         };
 
         arenaRadiusRef.current = initialRadiusRef.current;
@@ -663,15 +693,17 @@ export default function Game() {
                 f.vx *= Math.pow(0.99, speedMult);
                 f.x += f.vx * speedMult;
                 f.y += f.vy * speedMult;
-                const floorY = gameBoundsRef.current.height;
-                // Add a small individual offset based on ID to create a "pile" look
-                const individualFloorY = floorY - (f.id % 5) * 4;
-                if (f.y + f.radius > individualFloorY) {
-                    f.y = individualFloorY - f.radius;
-                    f.vy *= -0.4; f.vx *= 0.8;
+
+                // Remove dead flags once they fall off-screen
+                if (f.y > gameBoundsRef.current.height + 100) {
+                    const idToRemove = f.id;
+                    flagsRef.current.splice(i, 1);
+                    i--;
+
+                    // Sync with React state - React will handle DOM removal
+                    setFlags(prev => prev.filter(flag => flag.id !== idToRemove));
+                    continue;
                 }
-                if (f.x - f.radius < 0) { f.x = f.radius; f.vx *= -0.5; }
-                else if (f.x + f.radius > gameBoundsRef.current.width) { f.x = gameBoundsRef.current.width - f.radius; f.vx *= -0.5; }
             }
 
             const isRect = flagShape === 'rect';
@@ -704,7 +736,7 @@ export default function Game() {
         const el = document.getElementById(`flag-${loser.id}`);
         if (el) el.classList.add('dead');
 
-        // Sync to React state to prevent re-renders from clobbering zIndex/status
+        // Sync to React state - ensure we update the status AND use the correct zIndex
         setFlags(prev => prev.map(f => f.id === loser.id ? { ...loser } : f));
 
         // If it's a gap exit (assailant is itself), reduce momentum
@@ -755,517 +787,524 @@ export default function Game() {
     }, [isDarkMode]);
 
     return (
-        <div ref={containerRef} className={`relative w-full h-screen overflow-hidden flex items-center justify-center font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'}`}>
+        <div className={`fixed inset-0 w-full h-full overflow-hidden transition-colors duration-500 flex items-center justify-center ${isMobile ? 'bg-zinc-950' : (isDarkMode ? 'bg-slate-900' : 'bg-slate-100')}`}>
+            {/* Game Container (Simulated Phone or Full Screen) */}
+            <div
+                ref={containerRef}
+                className={`relative overflow-hidden font-sans transition-all duration-500 shadow-2xl ${isDarkMode ? 'bg-slate-900' : 'bg-slate-100'} ${isMobile ? 'w-full h-full md:w-[430px] md:h-[932px] md:max-h-[95vh] md:rounded-[3rem] md:border-[12px] md:border-slate-800' : 'w-full h-full'}`}
+            >
 
-            {/* Ranking Panel */}
-            <div className={`absolute ${isMobile ? 'top-2 left-2' : 'top-6 left-6'} z-[50000] flex flex-col space-y-2 pointer-events-none transition-all duration-300 ${isSidebarOpen ? 'opacity-0' : 'opacity-100'}`}>
-                <div className={`backdrop-blur-xl border rounded-[2rem] ${isMobile ? 'p-3 pr-6 min-w-[140px]' : 'p-6 pr-12 min-w-[200px]'} shadow-2xl transition-all ${isDarkMode ? 'bg-slate-900/40 border-white/10' : 'bg-white/60 border-slate-300/30'}`}>
-                    <div className="space-y-1">
-                        {ranking.length === 0 && <p className={`text-xs italic ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Waiting...</p>}
-                        {ranking.slice(0, 5).map((entry, i) => (
-                            <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-2 group">
-                                <span className={`font-bold ${isMobile ? 'text-sm' : 'text-lg'} w-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{i + 1}.</span>
-                                <span className={`font-black ${isMobile ? 'text-xs' : 'text-sm'} tracking-tight drop-shadow-sm truncate max-w-[100px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{entry.name}</span>
-                                <span className={`font-bold ${isMobile ? 'text-xs' : 'text-sm'} ml-auto ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>{entry.wins}/{pointsToWin}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* HUD */}
-            <div className={`absolute ${isMobile ? 'top-2 right-2' : 'top-6 right-6'} z-[200001] flex flex-col items-end space-y-3 pointer-events-none transition-all duration-300`}>
-                <div className="flex flex-row items-center space-x-2 pointer-events-auto">
-                    {/* Theme Toggle - Hidden when sidebar is open */}
-                    <button
-                        onClick={() => setIsDarkMode(!isDarkMode)}
-                        className={`${isMobile ? 'p-2 rounded-2xl' : 'p-4 rounded-3xl'} border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
-                        title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
-                    >
-                        {isDarkMode ? (
-                            <svg className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1m-16 0H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
-                        ) : (
-                            <svg className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                            </svg>
-                        )}
-                    </button>
-
-                    {/* Menu Button - Always Visible */}
-                    <button
-                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                        className={`${isMobile ? 'p-2 rounded-2xl' : 'p-4 rounded-3xl'} border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
-                    >
-                        <div className={`flex flex-col space-y-1.5 ${isMobile ? 'w-5' : 'w-6'}`}>
-                            <span className={`block h-0.5 w-full rounded-full transition-transform ${isSidebarOpen ? 'rotate-45 translate-y-2' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
-                            <span className={`block h-0.5 w-full rounded-full transition-opacity ${isSidebarOpen ? 'opacity-0' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
-                            <span className={`block h-0.5 w-full rounded-full transition-transform ${isSidebarOpen ? '-rotate-45 -translate-y-2' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
-                        </div>
-                    </button>
-                </div>
-
-                {/* Leader Circle - Hidden when sidebar is open */}
-                <div className={`relative flex flex-col items-center transition-all duration-300 pointer-events-auto ${isSidebarOpen ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`}>
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-yellow-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-yellow-400/50 uppercase tracking-tighter">
-                        Leader
-                    </div>
-                    <div className={`rounded-full border-[6px] flex items-center justify-center overflow-hidden transition-all duration-300 ${isDarkMode ? 'border-white/20 bg-slate-800/60' : 'border-slate-400/20 bg-slate-200/60'} shadow-2xl backdrop-blur-md bg-transparent`} style={{ width: isMobile ? '60px' : '80px', height: isMobile ? '60px' : '80px' }}>
-                        {ranking.length > 0 ? (
-                            <img src={`https://flagcdn.com/w160/${ranking[0].code}.png`} className="w-full h-full object-cover bg-transparent" alt={ranking[0].name} />
-                        ) : (
-                            <div className={`text-xs ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>--</div>
-                        )}
-                    </div>
-                    {ranking.length > 0 && (
-                        <div className={`mt-1 font-black ${isMobile ? 'text-[10px]' : 'text-xs'} ${isDarkMode ? 'text-white' : 'text-slate-900'} drop-shadow-md`}>
-                            {ranking[0].wins} {ranking[0].wins === 1 ? 'Win' : 'Wins'}
-                        </div>
-                    )}
-                </div>
-
-                {/* Alive Count - Hidden when sidebar is open */}
-                <div className={`flex items-center space-x-3 transition-all duration-300 pointer-events-auto ${isSidebarOpen ? 'opacity-0 translate-x-10 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
-                    <svg className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8'} animate-pulse`} viewBox="0 0 24 24" fill="red" style={{ background: 'none' }}>
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                    </svg>
-                    <span ref={hudRef} className={`font-black ${isMobile ? 'text-xl' : 'text-3xl'} tabular-nums text-green-400`}>{flags.filter(f => f.status === 'live').length}</span>
-                </div>
-            </div>
-
-            {/* Sidebar Overlay */}
-            <div className={`absolute inset-0 z-[200000] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setIsSidebarOpen(false)}></div>
-                <div className={`absolute top-0 right-0 h-full ${isMobile ? 'w-full max-w-xs' : 'w-80'} ${isDarkMode ? 'bg-slate-900/95 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900'} backdrop-blur-xl border-l shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-8 flex flex-col`}>
-                    <h2 className="text-3xl font-black tracking-tighter mb-8 shrink-0">SETTINGS</h2>
-
-                    <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
-
-                        {/* Settings Controls */}
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Points to Win: {tempPoints}</span>
-                            <input
-                                type="range"
-                                min="1"
-                                max="20"
-                                value={tempPoints}
-                                onChange={(e) => {
-                                    const val = parseInt(e.target.value);
-                                    setTempPoints(val);
-                                    setPointsToWin(val);
-                                }}
-                                className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Speed: {gameSpeed.toFixed(1)}x</span>
-                            <input
-                                type="range"
-                                min="0.1"
-                                max="2.0"
-                                step="0.1"
-                                value={gameSpeed}
-                                onChange={(e) => setGameSpeed(parseFloat(e.target.value))}
-                                className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Size: {((flagSize / 25) * 100).toFixed(0)}%</span>
-                            <input
-                                type="range"
-                                min="10"
-                                max="40"
-                                step="1"
-                                value={flagSize}
-                                onChange={(e) => setFlagSize(parseFloat(e.target.value))}
-                                className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Rotation: {(rotationSpeed * 5000).toFixed(0)}%</span>
-                            <input
-                                type="range"
-                                min="0.002"
-                                max="0.05"
-                                step="0.002"
-                                value={rotationSpeed}
-                                onChange={(e) => setRotationSpeed(parseFloat(e.target.value))}
-                                className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Gap: {(gapSize * 100).toFixed(0)}%</span>
-                            <input
-                                type="range"
-                                min="0.05"
-                                max="0.4"
-                                step="0.01"
-                                value={gapSize}
-                                onChange={(e) => setGapSize(parseFloat(e.target.value))}
-                                className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Vibration: {vibrationStrength.toFixed(0)}</span>
-                            <input
-                                type="range"
-                                min="0"
-                                max="10"
-                                step="1"
-                                value={vibrationStrength}
-                                onChange={(e) => setVibrationStrength(parseFloat(e.target.value))}
-                                className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70">Collision: {collisionForce.toFixed(0)}</span>
-                            <input
-                                type="range"
-                                min="5"
-                                max="50"
-                                step="1"
-                                value={collisionForce}
-                                onChange={(e) => setCollisionForce(parseFloat(e.target.value))}
-                                className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                            />
-                        </div>
-
-                        {/* Toggles */}
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70 font-bold">Sound Effects</span>
-                            <button
-                                onClick={() => setSoundEnabled(!soundEnabled)}
-                                className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${soundEnabled ? 'bg-indigo-600' : 'bg-slate-600'}`}
-                            >
-                                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                            </button>
-                        </div>
-
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-sm font-medium opacity-70 font-bold">Show Names</span>
-                            <button
-                                onClick={() => setShowNames(!showNames)}
-                                className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${showNames ? 'bg-indigo-600' : 'bg-slate-600'}`}
-                            >
-                                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${showNames ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                            </button>
-                        </div>
-
-                        <div className="flex justify-between items-center mb-8">
-                            <span className="text-sm font-medium opacity-70 font-bold">Auto Game</span>
-                            <button
-                                onClick={() => setIsAutoGame(!isAutoGame)}
-                                className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${isAutoGame ? 'bg-indigo-600' : 'bg-slate-600'}`}
-                            >
-                                <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isAutoGame ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                            </button>
-                        </div>
-
-                        {/* Device Mode Selector */}
-                        <div className="flex justify-between items-center mb-8 p-4 rounded-2xl bg-white/5 border border-white/10">
-                            <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Device Mode</span>
-                            <div className="flex bg-slate-800 rounded-xl p-1">
-                                {(['auto', 'mobile', 'desktop'] as const).map((mode) => (
-                                    <button
-                                        key={mode}
-                                        onClick={() => setDeviceMode(mode)}
-                                        className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${deviceMode === mode ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                                    >
-                                        {mode}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex justify-between items-center mb-10 p-4 rounded-2xl bg-white/5 border border-white/10">
-                            <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Flag Shape</span>
-                            <div className="flex bg-slate-800 rounded-xl p-1">
-                                <button
-                                    onClick={() => setFlagShape('circle')}
-                                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'circle' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    CIRCLE
-                                </button>
-                                <button
-                                    onClick={() => setFlagShape('rect')}
-                                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'rect' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    RECT
-                                </button>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={() => {
-                                setPointsToWin(tempPoints);
-                                setIsSidebarOpen(false);
-                            }}
-                            className="w-full mt-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-all"
-                        >
-                            Apply
-                        </button>
-
-                        {/* Profiles Section */}
-                        <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
-                            <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Profiles</h3>
-                            <div className="flex space-x-2">
-                                <input
-                                    type="text"
-                                    placeholder="Profile Name..."
-                                    value={newPresetName}
-                                    onChange={(e) => setNewPresetName(e.target.value)}
-                                    className={`flex-1 bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
-                                />
-                                <button
-                                    onClick={saveCurrentAsPreset}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-all active:scale-95"
-                                    title="Save as Profile"
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                                {presets.length === 0 && <p className="text-xs italic opacity-50 px-1">No saved profiles yet.</p>}
-                                {presets.map(preset => (
-                                    <div key={preset.id} className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'}`}>
-                                        <button onClick={() => loadPreset(preset)} className="flex-1 text-left font-bold text-xs truncate mr-2">{preset.name}</button>
-                                        <button onClick={() => deletePreset(preset.id)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 transition-opacity">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Continents & Country Search */}
-                        <div className="mt-10 space-y-4">
-                            <div className="flex items-center justify-between px-1 mb-4">
-                                <label className="text-sm font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Victory Backgrounds</label>
-                                <button
-                                    onClick={() => setShowVictoryBackgrounds(!showVictoryBackgrounds)}
-                                    className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${showVictoryBackgrounds ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                                >
-                                    <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${showVictoryBackgrounds ? 'translate-x-4' : 'translate-x-0'}`} />
-                                </button>
-                            </div>
-
-                            <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest px-1">Continents</h3>
-                            {continents.map(cont => (
-                                <button key={cont} onClick={() => { setSelectedContinent(cont); setCountrySearch(''); }} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
-                                    <span>{cont}</span>
-                                </button>
+                {/* Ranking Panel */}
+                <div className={`absolute ${isMobile ? 'top-20 left-4' : 'top-6 left-6'} z-[50000] flex flex-col space-y-2 pointer-events-none transition-all duration-300 ${isSidebarOpen ? 'opacity-0' : 'opacity-100'}`}>
+                    <div className={`backdrop-blur-xl border rounded-[2rem] ${isMobile ? 'p-3 pr-6 min-w-[140px]' : 'p-6 pr-12 min-w-[200px]'} shadow-2xl transition-all ${isDarkMode ? 'bg-slate-900/40 border-white/10' : 'bg-white/60 border-slate-300/30'}`}>
+                        <div className="space-y-1">
+                            {ranking.length === 0 && <p className={`${isMobile ? 'text-[10px]' : 'text-xs'} italic ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>Waiting...</p>}
+                            {ranking.slice(0, 5).map((entry, i) => (
+                                <div key={`${entry.code}-${entry.wins}`} className="flex items-center space-x-2 group">
+                                    <span className={`font-bold ${isMobile ? 'text-[10px]' : 'text-lg'} w-4 ${isDarkMode ? 'text-slate-400' : 'text-slate-700'}`}>{i + 1}.</span>
+                                    <span className={`font-black ${isMobile ? 'text-[10px]' : 'text-sm'} tracking-tight drop-shadow-sm truncate max-w-[80px] ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{entry.name}</span>
+                                    <span className={`font-bold ${isMobile ? 'text-[10px]' : 'text-sm'} ml-auto ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'}`}>{entry.wins}/{pointsToWin}</span>
+                                </div>
                             ))}
                         </div>
+                    </div>
+                </div>
 
-                        {selectedContinent !== 'All' && (
-                            <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
-                                <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Countries in {selectedContinent}</h3>
-                                <input
-                                    type="text"
-                                    placeholder="Search country..."
-                                    value={countrySearch}
-                                    onChange={(e) => setCountrySearch(e.target.value)}
-                                    className={`w-full bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
-                                />
-                                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                                    {WORLD_FLAGS
-                                        .filter(f => f.continent === (selectedContinent === 'America' ? 'Americas' : selectedContinent))
-                                        .filter(f => f.name.toLowerCase().includes(countrySearch.toLowerCase()))
-                                        .map(country => (
-                                            <div key={country.code} className={`flex items-center space-x-3 p-2 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
-                                                <img src={`https://flagcdn.com/w40/${country.code}.png`} className="w-8 h-5 object-cover rounded shadow-sm" alt={country.name} />
-                                                <span className="font-bold text-xs truncate">{country.name}</span>
-                                            </div>
-                                        ))
-                                    }
-                                </div>
+                {/* HUD */}
+                <div className={`absolute ${isMobile ? 'top-16 right-4' : 'top-6 right-6'} z-[200001] flex flex-col items-end space-y-3 pointer-events-none transition-all duration-300`}>
+                    <div className="flex flex-row items-center space-x-2 pointer-events-auto">
+                        {/* Theme Toggle - Hidden when sidebar is open */}
+                        <button
+                            onClick={() => setIsDarkMode(!isDarkMode)}
+                            className={`${isMobile ? 'p-2 rounded-2xl' : 'p-4 rounded-3xl'} border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
+                            title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                        >
+                            {isDarkMode ? (
+                                <svg className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1m-16 0H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                                </svg>
+                            ) : (
+                                <svg className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                                </svg>
+                            )}
+                        </button>
+
+                        {/* Menu Button - Always Visible */}
+                        <button
+                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                            className={`${isMobile ? 'p-2 rounded-2xl' : 'p-4 rounded-3xl'} border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isDarkMode ? 'bg-slate-800/80 hover:bg-slate-700 text-white border-white/10' : 'bg-white/80 hover:bg-white text-slate-900 border-slate-300/30'}`}
+                        >
+                            <div className={`flex flex-col space-y-1.5 ${isMobile ? 'w-5' : 'w-6'}`}>
+                                <span className={`block h-0.5 w-full rounded-full transition-transform ${isSidebarOpen ? 'rotate-45 translate-y-2' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
+                                <span className={`block h-0.5 w-full rounded-full transition-opacity ${isSidebarOpen ? 'opacity-0' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
+                                <span className={`block h-0.5 w-full rounded-full transition-transform ${isSidebarOpen ? '-rotate-45 -translate-y-2' : ''} ${isDarkMode ? 'bg-white' : 'bg-slate-900'}`}></span>
+                            </div>
+                        </button>
+                    </div>
+
+                    {/* Leader Circle - Hidden when sidebar is open */}
+                    <div className={`relative flex flex-col items-center transition-all duration-300 pointer-events-auto ${isSidebarOpen ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`}>
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 bg-yellow-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg border border-yellow-400/50 uppercase tracking-tighter">
+                            Leader
+                        </div>
+                        <div className={`rounded-full border-[6px] flex items-center justify-center overflow-hidden transition-all duration-300 ${isDarkMode ? 'border-white/20 bg-slate-800/60' : 'border-slate-400/20 bg-slate-200/60'} shadow-2xl backdrop-blur-md bg-transparent`} style={{ width: isMobile ? '45px' : '80px', height: isMobile ? '45px' : '80px' }}>
+                            {ranking.length > 0 ? (
+                                <img src={`https://flagcdn.com/w160/${ranking[0].code}.png`} className="w-full h-full object-cover bg-transparent" alt={ranking[0].name} />
+                            ) : (
+                                <div className={`text-[8px] ${isDarkMode ? 'text-slate-500' : 'text-slate-600'}`}>--</div>
+                            )}
+                        </div>
+                        {ranking.length > 0 && (
+                            <div className={`mt-1 font-black ${isMobile ? 'text-[9px]' : 'text-xs'} ${isDarkMode ? 'text-white' : 'text-slate-900'} drop-shadow-md`}>
+                                {ranking[0].wins} {ranking[0].wins === 1 ? 'Win' : 'Wins'}
                             </div>
                         )}
                     </div>
-                    <button onClick={() => { setIsSidebarOpen(false); initGame(); }} className="mt-8 w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all shrink-0">RESET FLAGS</button>
+
+                    {/* Alive Count - Hidden when sidebar is open */}
+                    <div className={`flex items-center space-x-3 transition-all duration-300 pointer-events-auto ${isSidebarOpen ? 'opacity-0 translate-x-10 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
+                        <svg className={`${isMobile ? 'w-6 h-6' : 'w-8 h-8'} animate-pulse`} viewBox="0 0 24 24" fill="red" style={{ background: 'none' }}>
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41 0.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                        </svg>
+                        <span ref={hudRef} className={`font-black ${isMobile ? 'text-xl' : 'text-3xl'} tabular-nums text-green-400`}>{flags.filter(f => f.status === 'live').length}</span>
+                    </div>
                 </div>
-            </div>
 
-            {/* Menu Overlays (Winner/Champion/Start) */}
-            {gameStatus !== 'playing' && gameStatus !== 'spawning' && (
-                <div className="absolute inset-0 z-[100000] flex items-center justify-center overflow-hidden">
-                    {/* Full Screen Cultural Background */}
-                    {(gameStatus === 'winner' || gameStatus === 'champion') && showVictoryBackgrounds && activeVictoryTheme?.backgroundImage && (
-                        <div
-                            className="absolute inset-0 z-0 animate-fade-in"
-                            style={{
-                                backgroundImage: `url(${activeVictoryTheme.backgroundImage})`,
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center',
-                                filter: 'brightness(0.6)'
-                            }}
-                        />
-                    )}
-                    <div className={`absolute inset-0 bg-black/30 backdrop-blur-[2px] z-[1]`}></div>
+                {/* Sidebar Overlay */}
+                <div className={`absolute inset-0 z-[200000] transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setIsSidebarOpen(false)}></div>
+                    <div className={`absolute top-0 right-0 h-full ${isMobile ? 'w-full max-w-xs' : 'w-80'} ${isDarkMode ? 'bg-slate-900/95 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900'} backdrop-blur-xl border-l shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-8 flex flex-col`}>
+                        <h2 className="text-3xl font-black tracking-tighter mb-8 shrink-0">SETTINGS</h2>
 
-                    <div className={`text-center p-8 rounded-[3rem] border border-white/50 shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] w-full max-w-sm transform scale-[0.85] z-50 bg-white/95 backdrop-blur-xl transition-all duration-500`}>
-                        {gameStatus === 'menu' && (
-                            <div className="flex flex-col items-center">
-                                <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
-                                <p className={`${isDarkMode ? 'text-slate-400' : 'text-slate-500'} text-sm mb-6`}>Points to Win: <span className="text-yellow-500 font-bold">{pointsToWin}</span></p>
-                                <button onClick={initGame} className="w-full py-5 bg-indigo-600 text-white font-bold rounded-2xl text-2xl mt-8 hover:bg-indigo-700 transition-colors">PLAY</button>
+                        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+
+                            {/* Settings Controls */}
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70">Points to Win: {tempPoints}</span>
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="20"
+                                    value={tempPoints}
+                                    onChange={(e) => {
+                                        const val = parseInt(e.target.value);
+                                        setTempPoints(val);
+                                        setPointsToWin(val);
+                                    }}
+                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
+                                />
                             </div>
-                        )}
-                        {gameStatus === 'winner' && (
-                            <div className="flex flex-col items-center relative overflow-hidden">
-                                {/* Cultural Background Elements */}
-                                <div className="absolute inset-0 pointer-events-none opacity-20">
-                                    <div className="absolute top-0 left-0 text-8xl animate-pulse">{activeVictoryTheme?.symbol}</div>
-                                    <div className="absolute bottom-0 right-0 text-8xl animate-bounce">{activeVictoryTheme?.symbol}</div>
-                                </div>
 
-                                <div className="w-44 h-44 mb-6 rounded-full overflow-hidden border-[10px] shadow-2xl bg-white relative z-10 mx-auto" style={{ borderColor: activeVictoryTheme?.colors[0] || '#22c55e' }}>
-                                    {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover scale-110" alt={winner.name} />}
-                                </div>
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70">Speed: {gameSpeed.toFixed(1)}x</span>
+                                <input
+                                    type="range"
+                                    min="0.1"
+                                    max="2.0"
+                                    step="0.1"
+                                    value={gameSpeed}
+                                    onChange={(e) => setGameSpeed(parseFloat(e.target.value))}
+                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
+                                />
+                            </div>
 
-                                <h2 className="text-sm font-black mb-1 tracking-[0.2em] uppercase" style={{ color: activeVictoryTheme?.colors[0] || '#22c55e' }}>
-                                    {activeVictoryTheme?.celebration || 'ROUND CHAMPION'}
-                                </h2>
-                                <h1 className="text-5xl font-black mb-6 text-slate-900 drop-shadow-sm text-center">
-                                    {winner?.name}
-                                </h1>
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70">Size: {((flagSize / 25) * 100).toFixed(0)}%</span>
+                                <input
+                                    type="range"
+                                    min="10"
+                                    max="40"
+                                    step="1"
+                                    value={flagSize}
+                                    onChange={(e) => setFlagSize(parseFloat(e.target.value))}
+                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
+                                />
+                            </div>
 
-                                {/* Cultural Insight Section - Light Grey as per Mockup */}
-                                <div className="w-full p-5 rounded-3xl mb-8 bg-slate-50 border border-slate-100 shadow-inner">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 italic">Culture & Spirit</p>
-                                    <div className="flex items-center space-x-4">
-                                        <div className="text-4xl filter drop-shadow-sm">{activeVictoryTheme?.symbol}</div>
-                                        <div className="text-left">
-                                            <p className="text-sm font-black leading-tight uppercase text-slate-800">{activeVictoryTheme?.action}</p>
-                                            <p className="text-[11px] text-slate-500 font-bold mt-0.5">{activeVictoryTheme?.landscape}</p>
-                                        </div>
-                                    </div>
-                                </div>
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70">Rotation: {(rotationSpeed * 5000).toFixed(0)}%</span>
+                                <input
+                                    type="range"
+                                    min="0.002"
+                                    max="0.05"
+                                    step="0.002"
+                                    value={rotationSpeed}
+                                    onChange={(e) => setRotationSpeed(parseFloat(e.target.value))}
+                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
+                                />
+                            </div>
 
-                                {autoCountdown !== null && (
-                                    <div className="mb-6 text-2xl font-black animate-bounce" style={{ color: activeVictoryTheme?.colors[0] || '#6366f1' }}>
-                                        {autoCountdown === 0 ? 'START!' : autoCountdown}
-                                    </div>
-                                )}
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70">Gap: {(gapSize * 100).toFixed(0)}%</span>
+                                <input
+                                    type="range"
+                                    min="0.05"
+                                    max="0.4"
+                                    step="0.01"
+                                    value={gapSize}
+                                    onChange={(e) => setGapSize(parseFloat(e.target.value))}
+                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
+                                />
+                            </div>
 
-                                <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-                                    {[...Array(20)].map((_, i) => (
-                                        <div
-                                            key={i}
-                                            className="absolute animate-celebrate-particle opacity-0"
-                                            style={{
-                                                left: `${Math.random() * 100}%`,
-                                                top: `${Math.random() * 100}%`,
-                                                animationDelay: `${Math.random() * 3}s`,
-                                                fontSize: `${Math.random() * 20 + 20}px`
-                                            }}
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70">Vibration: {vibrationStrength.toFixed(0)}</span>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="10"
+                                    step="1"
+                                    value={vibrationStrength}
+                                    onChange={(e) => setVibrationStrength(parseFloat(e.target.value))}
+                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
+                                />
+                            </div>
+
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70">Collision: {collisionForce.toFixed(0)}</span>
+                                <input
+                                    type="range"
+                                    min="5"
+                                    max="50"
+                                    step="1"
+                                    value={collisionForce}
+                                    onChange={(e) => setCollisionForce(parseFloat(e.target.value))}
+                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
+                                />
+                            </div>
+
+                            {/* Toggles */}
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70 font-bold">Sound Effects</span>
+                                <button
+                                    onClick={() => setSoundEnabled(!soundEnabled)}
+                                    className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${soundEnabled ? 'bg-indigo-600' : 'bg-slate-600'}`}
+                                >
+                                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                            </div>
+
+                            <div className="flex justify-between items-center mb-6">
+                                <span className="text-sm font-medium opacity-70 font-bold">Show Names</span>
+                                <button
+                                    onClick={() => setShowNames(!showNames)}
+                                    className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${showNames ? 'bg-indigo-600' : 'bg-slate-600'}`}
+                                >
+                                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${showNames ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                            </div>
+
+                            <div className="flex justify-between items-center mb-8">
+                                <span className="text-sm font-medium opacity-70 font-bold">Auto Game</span>
+                                <button
+                                    onClick={() => setIsAutoGame(!isAutoGame)}
+                                    className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${isAutoGame ? 'bg-indigo-600' : 'bg-slate-600'}`}
+                                >
+                                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isAutoGame ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                </button>
+                            </div>
+
+                            {/* Device Mode Selector */}
+                            <div className="flex justify-between items-center mb-8 p-4 rounded-2xl bg-white/5 border border-white/10">
+                                <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Device Mode</span>
+                                <div className="flex bg-slate-800 rounded-xl p-1">
+                                    {(['auto', 'mobile', 'desktop'] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            onClick={() => setDeviceMode(mode)}
+                                            className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${deviceMode === mode ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                                         >
-                                            {activeVictoryTheme?.symbol}
+                                            {mode}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center mb-10 p-4 rounded-2xl bg-white/5 border border-white/10">
+                                <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Flag Shape</span>
+                                <div className="flex bg-slate-800 rounded-xl p-1">
+                                    <button
+                                        onClick={() => setFlagShape('circle')}
+                                        className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'circle' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        CIRCLE
+                                    </button>
+                                    <button
+                                        onClick={() => setFlagShape('rect')}
+                                        className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'rect' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        RECT
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    setPointsToWin(tempPoints);
+                                    setIsSidebarOpen(false);
+                                }}
+                                className="w-full mt-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-all"
+                            >
+                                Apply
+                            </button>
+
+                            {/* Profiles Section */}
+                            <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
+                                <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Profiles</h3>
+                                <div className="flex space-x-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Profile Name..."
+                                        value={newPresetName}
+                                        onChange={(e) => setNewPresetName(e.target.value)}
+                                        className={`flex-1 bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                                    />
+                                    <button
+                                        onClick={saveCurrentAsPreset}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-all active:scale-95"
+                                        title="Save as Profile"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                    {presets.length === 0 && <p className="text-xs italic opacity-50 px-1">No saved profiles yet.</p>}
+                                    {presets.map(preset => (
+                                        <div key={preset.id} className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'}`}>
+                                            <button onClick={() => loadPreset(preset)} className="flex-1 text-left font-bold text-xs truncate mr-2">{preset.name}</button>
+                                            <button onClick={() => deletePreset(preset.id)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 transition-opacity">
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
-
-                                <button
-                                    onClick={() => { setWinner(null); setActiveVictoryTheme(null); initGame(); }}
-                                    className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2"
-                                >
-                                    <span>Victory Celebration!</span>
-                                </button>
                             </div>
-                        )}
-                        {gameStatus === 'champion' && champion && (
-                            <div className="flex flex-col items-center relative transition-all duration-700">
-                                <div className="w-48 h-48 mb-6 rounded-full overflow-hidden border-[12px] shadow-2xl bg-white relative z-10 mx-auto" style={{ borderColor: activeVictoryTheme?.colors[0] || '#22c55e' }}>
-                                    <img src={`https://flagcdn.com/w320/${champion.code}.png`} className="w-full h-full object-cover scale-110" alt={champion.name} />
+
+                            {/* Continents & Country Search */}
+                            <div className="mt-10 space-y-4">
+                                <div className="flex items-center justify-between px-1 mb-4">
+                                    <label className="text-sm font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Victory Backgrounds</label>
+                                    <button
+                                        onClick={() => setShowVictoryBackgrounds(!showVictoryBackgrounds)}
+                                        className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${showVictoryBackgrounds ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+                                    >
+                                        <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${showVictoryBackgrounds ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </button>
                                 </div>
 
-                                <h2 className="text-sm font-black mb-1 tracking-[0.3em] uppercase" style={{ color: activeVictoryTheme?.colors[0] || '#22c55e' }}>
-                                    {activeVictoryTheme?.celebration.toUpperCase() || 'GRAND CHAMPION'}
-                                </h2>
-                                <h1 className="text-6xl font-black mb-2 text-slate-900 drop-shadow-sm text-center">
-                                    {champion.name}
-                                </h1>
-                                <p className="text-2xl font-bold mb-8 text-slate-500">
-                                    {champion?.wins} {champion?.wins === 1 ? 'Victory' : 'Victories'}
-                                </p>
+                                <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest px-1">Continents</h3>
+                                {continents.map(cont => (
+                                    <button key={cont} onClick={() => { setSelectedContinent(cont); setCountrySearch(''); }} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
+                                        <span>{cont}</span>
+                                    </button>
+                                ))}
+                            </div>
 
-                                {/* Deep Cultural Insight */}
-                                <div className="w-full p-6 rounded-[2.5rem] mb-10 bg-slate-50 border border-slate-100 shadow-inner">
-                                    <div className="flex flex-col space-y-4">
-                                        <div className="flex items-center space-x-5">
-                                            <div className="text-5xl filter drop-shadow-md">{activeVictoryTheme?.symbol}</div>
-                                            <div className="text-left">
-                                                <p className="text-lg font-black leading-tight uppercase text-slate-800">{activeVictoryTheme?.action}</p>
-                                                <p className="text-sm text-slate-500 font-bold mt-1 italic">{activeVictoryTheme?.landscape}</p>
-                                            </div>
-                                        </div>
+                            {selectedContinent !== 'All' && (
+                                <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
+                                    <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Countries in {selectedContinent}</h3>
+                                    <input
+                                        type="text"
+                                        placeholder="Search country..."
+                                        value={countrySearch}
+                                        onChange={(e) => setCountrySearch(e.target.value)}
+                                        className={`w-full bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
+                                    />
+                                    <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                                        {WORLD_FLAGS
+                                            .filter(f => f.continent === (selectedContinent === 'America' ? 'Americas' : selectedContinent))
+                                            .filter(f => f.name.toLowerCase().includes(countrySearch.toLowerCase()))
+                                            .map(country => (
+                                                <div key={country.code} className={`flex items-center space-x-3 p-2 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
+                                                    <img src={`https://flagcdn.com/w40/${country.code}.png`} className="w-8 h-5 object-cover rounded shadow-sm" alt={country.name} />
+                                                    <span className="font-bold text-xs truncate">{country.name}</span>
+                                                </div>
+                                            ))
+                                        }
                                     </div>
-                                </div>
-
-                                <button
-                                    onClick={resetGame}
-                                    className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-2xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 shadow-green-200"
-                                >
-                                    NEW COMPETITION
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Arena Background */}
-            <div ref={arenaBgRef} className="absolute rounded-full transition-all duration-75 ease-linear pointer-events-none z-[1]" style={{ width: '600px', height: '600px' }}>
-                <div className={`arena-wall absolute inset-0 rounded-full border-[10px] transition-colors duration-300 ${isDarkMode ? 'border-indigo-500' : 'border-indigo-400'}`}></div>
-            </div>
-
-            {/* Flags Container */}
-            <div ref={flagsContainerRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-[10]">
-                {flags.map((f) => {
-                    const isRect = flagShape === 'rect';
-                    const w = isRect ? flagSize * 2.8 : flagSize * 2;
-                    const h = isRect ? flagSize * 1.8 : flagSize * 2;
-
-                    return (
-                        <div
-                            key={f.id}
-                            id={`flag-${f.id}`}
-                            className={`flag-entity ${isRect ? 'rounded-lg' : 'rounded-full'} bg-transparent ${isDarkMode ? 'shadow-xl' : 'shadow-md'} text-center ${f.status === 'dead' ? 'dead' : ''}`}
-                            style={{
-                                width: `${w}px`,
-                                height: `${h}px`,
-                                position: 'absolute',
-                                zIndex: f.zIndex,
-                                transform: `translate(${f.x - w / 2}px, ${f.y - h / 2}px)`,
-                                animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                                willChange: 'transform',
-                                display: f.x < 10 || f.y < 10 ? 'none' : 'block'
-                            }}
-                        >
-                            <div className={`w-full h-full ${isRect ? 'rounded-lg' : 'rounded-full'} overflow-hidden border-2 relative z-10 box-border bg-transparent ${isDarkMode ? 'border-white/80' : 'border-slate-400/20'}`}>
-                                <img src={`https://flagcdn.com/w160/${f.code}.png`} alt={f.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            </div>
-                            {showNames && (
-                                <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm name-label z-[25] opacity-100">
-                                    {f.name}
                                 </div>
                             )}
                         </div>
-                    );
-                })}
+                        <button onClick={() => { setIsSidebarOpen(false); initGame(); }} className="mt-8 w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all shrink-0">RESET FLAGS</button>
+                    </div>
+                </div>
+
+                {/* Menu Overlays (Winner/Champion/Start) */}
+                {gameStatus !== 'playing' && gameStatus !== 'spawning' && (
+                    <div className="absolute inset-0 z-[100000] flex items-center justify-center overflow-hidden">
+                        {/* Full Screen Cultural Background */}
+                        {(gameStatus === 'winner' || gameStatus === 'champion') && showVictoryBackgrounds && activeVictoryTheme?.backgroundImage && (
+                            <div
+                                className="absolute inset-0 z-0 animate-fade-in"
+                                style={{
+                                    backgroundImage: `url(${activeVictoryTheme.backgroundImage})`,
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                    filter: 'brightness(0.6)'
+                                }}
+                            />
+                        )}
+                        <div className={`absolute inset-0 bg-black/30 backdrop-blur-[2px] z-[1]`}></div>
+
+                        <div className={`text-center p-8 rounded-[3rem] border border-white/50 shadow-[0_35px_60px_-15px_rgba(0,0,0,0.5)] w-full max-w-sm transform scale-[0.85] z-50 bg-white/95 backdrop-blur-xl transition-all duration-500`}>
+                            {gameStatus === 'menu' && (
+                                <div className="flex flex-col items-center">
+                                    <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-emerald-400 mb-2 leading-tight">FLAG<br />ROYALE</h1>
+                                    <p className={`${isDarkMode ? 'text-slate-400' : 'text-slate-500'} text-sm mb-6`}>Points to Win: <span className="text-yellow-500 font-bold">{pointsToWin}</span></p>
+                                    <button onClick={initGame} className="w-full py-5 bg-indigo-600 text-white font-bold rounded-2xl text-2xl mt-8 hover:bg-indigo-700 transition-colors">PLAY</button>
+                                </div>
+                            )}
+                            {gameStatus === 'winner' && (
+                                <div className="flex flex-col items-center relative overflow-hidden">
+                                    {/* Cultural Background Elements */}
+                                    <div className="absolute inset-0 pointer-events-none opacity-20">
+                                        <div className="absolute top-0 left-0 text-8xl animate-pulse">{activeVictoryTheme?.symbol}</div>
+                                        <div className="absolute bottom-0 right-0 text-8xl animate-bounce">{activeVictoryTheme?.symbol}</div>
+                                    </div>
+
+                                    <div className="w-44 h-44 mb-6 rounded-full overflow-hidden border-[10px] shadow-2xl bg-white relative z-10 mx-auto" style={{ borderColor: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                        {winner && <img src={`https://flagcdn.com/w320/${winner.code}.png`} className="w-full h-full object-cover scale-110" alt={winner.name} />}
+                                    </div>
+
+                                    <h2 className="text-sm font-black mb-1 tracking-[0.2em] uppercase" style={{ color: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                        {activeVictoryTheme?.celebration || 'ROUND CHAMPION'}
+                                    </h2>
+                                    <h1 className="text-5xl font-black mb-6 text-slate-900 drop-shadow-sm text-center">
+                                        {winner?.name}
+                                    </h1>
+
+                                    {/* Cultural Insight Section - Light Grey as per Mockup */}
+                                    <div className="w-full p-5 rounded-3xl mb-8 bg-slate-50 border border-slate-100 shadow-inner">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 italic">Culture & Spirit</p>
+                                        <div className="flex items-center space-x-4">
+                                            <div className="text-4xl filter drop-shadow-sm">{activeVictoryTheme?.symbol}</div>
+                                            <div className="text-left">
+                                                <p className="text-sm font-black leading-tight uppercase text-slate-800">{activeVictoryTheme?.action}</p>
+                                                <p className="text-[11px] text-slate-500 font-bold mt-0.5">{activeVictoryTheme?.landscape}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {autoCountdown !== null && (
+                                        <div className="mb-6 text-2xl font-black animate-bounce" style={{ color: activeVictoryTheme?.colors[0] || '#6366f1' }}>
+                                            {autoCountdown === 0 ? 'START!' : autoCountdown}
+                                        </div>
+                                    )}
+
+                                    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+                                        {[...Array(20)].map((_, i) => (
+                                            <div
+                                                key={i}
+                                                className="absolute animate-celebrate-particle opacity-0"
+                                                style={{
+                                                    left: `${Math.random() * 100}%`,
+                                                    top: `${Math.random() * 100}%`,
+                                                    animationDelay: `${Math.random() * 3}s`,
+                                                    fontSize: `${Math.random() * 20 + 20}px`
+                                                }}
+                                            >
+                                                {activeVictoryTheme?.symbol}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        onClick={() => { setWinner(null); setActiveVictoryTheme(null); initGame(); }}
+                                        className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2"
+                                    >
+                                        <span>Victory Celebration!</span>
+                                    </button>
+                                </div>
+                            )}
+                            {gameStatus === 'champion' && champion && (
+                                <div className="flex flex-col items-center relative transition-all duration-700">
+                                    <div className="w-48 h-48 mb-6 rounded-full overflow-hidden border-[12px] shadow-2xl bg-white relative z-10 mx-auto" style={{ borderColor: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                        <img src={`https://flagcdn.com/w320/${champion.code}.png`} className="w-full h-full object-cover scale-110" alt={champion.name} />
+                                    </div>
+
+                                    <h2 className="text-sm font-black mb-1 tracking-[0.3em] uppercase" style={{ color: activeVictoryTheme?.colors[0] || '#22c55e' }}>
+                                        {activeVictoryTheme?.celebration.toUpperCase() || 'GRAND CHAMPION'}
+                                    </h2>
+                                    <h1 className="text-6xl font-black mb-2 text-slate-900 drop-shadow-sm text-center">
+                                        {champion.name}
+                                    </h1>
+                                    <p className="text-2xl font-bold mb-8 text-slate-500">
+                                        {champion?.wins} {champion?.wins === 1 ? 'Victory' : 'Victories'}
+                                    </p>
+
+                                    {/* Deep Cultural Insight */}
+                                    <div className="w-full p-6 rounded-[2.5rem] mb-10 bg-slate-50 border border-slate-100 shadow-inner">
+                                        <div className="flex flex-col space-y-4">
+                                            <div className="flex items-center space-x-5">
+                                                <div className="text-5xl filter drop-shadow-md">{activeVictoryTheme?.symbol}</div>
+                                                <div className="text-left">
+                                                    <p className="text-lg font-black leading-tight uppercase text-slate-800">{activeVictoryTheme?.action}</p>
+                                                    <p className="text-sm text-slate-500 font-bold mt-1 italic">{activeVictoryTheme?.landscape}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={resetGame}
+                                        className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-2xl shadow-xl transition-all hover:scale-[1.02] active:scale-95 shadow-green-200"
+                                    >
+                                        NEW COMPETITION
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Arena Background */}
+                <div ref={arenaBgRef} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all duration-75 ease-linear pointer-events-none z-[1]" style={{ width: '600px', height: '600px' }}>
+                    <div className={`arena-wall absolute inset-0 rounded-full border-[10px] transition-colors duration-300 ${isDarkMode ? 'border-indigo-500' : 'border-indigo-400'}`}></div>
+                </div>
+
+                {/* Flags Container */}
+                <div ref={flagsContainerRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-[10]">
+                    {flags.map((f) => {
+                        const isRect = flagShape === 'rect';
+                        const w = isRect ? flagSize * 2.8 : flagSize * 2;
+                        const h = isRect ? flagSize * 1.8 : flagSize * 2;
+
+                        return (
+                            <div
+                                key={f.id}
+                                id={`flag-${f.id}`}
+                                className={`flag-entity ${isRect ? 'rounded-lg' : 'rounded-full'} bg-transparent ${isDarkMode ? 'shadow-xl' : 'shadow-md'} text-center ${f.status === 'dead' ? 'dead' : ''}`}
+                                style={{
+                                    width: `${w}px`,
+                                    height: `${h}px`,
+                                    position: 'absolute',
+                                    zIndex: f.zIndex,
+                                    transform: `translate(${f.x - w / 2}px, ${f.y - h / 2}px)`,
+                                    animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                                    willChange: 'transform',
+                                    display: f.x < 10 || f.y < 10 ? 'none' : 'block'
+                                }}
+                            >
+                                <div className={`w-full h-full ${isRect ? 'rounded-lg' : 'rounded-full'} overflow-hidden border-2 relative z-10 box-border bg-transparent ${isDarkMode ? 'border-white/80' : 'border-slate-400/20'}`}>
+                                    <img src={`https://flagcdn.com/w160/${f.code}.png`} alt={f.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                                {showNames && (
+                                    <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 whitespace-nowrap bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full backdrop-blur-sm name-label z-[25] opacity-100">
+                                        {f.name}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
+            {/* Final closing div for the new outer wrapper */}
         </div>
     );
-}
+} // End of Game component
