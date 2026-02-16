@@ -40,6 +40,7 @@ interface GamePreset {
         vibrationStrength: number;
         collisionForce: number;
         showVictoryBackgrounds: boolean;
+        showSpawningCountdown: boolean;
     };
 }
 
@@ -55,7 +56,7 @@ export default function Game() {
     const [selectedContinent, setSelectedContinent] = useState<string>('All');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [ranking, setRanking] = useState<RankingEntry[]>([]);
-    const [pointsToWin, setPointsToWin] = useState<number>(5);
+    const [pointsToWin, setPointsToWin] = useState<number>(3);
     const [tempPoints, setTempPoints] = useState<number>(5);
     const [isDarkMode, setIsDarkMode] = useState(true);
     const [gameSpeed, setGameSpeed] = useState<number>(1.0);
@@ -74,6 +75,8 @@ export default function Game() {
     const [flagShape, setFlagShape] = useState<'circle' | 'rect'>('circle');
     const [showVictoryBackgrounds, setShowVictoryBackgrounds] = useState<boolean>(true);
     const [activeVictoryTheme, setActiveVictoryTheme] = useState<VictoryTheme | null>(null);
+    const [spawningCountdown, setSpawningCountdown] = useState<number | null>(null);
+    const [showSpawningCountdown, setShowSpawningCountdown] = useState<boolean>(true);
 
     // Device Mode State
     const [deviceMode, setDeviceMode] = useState<'auto' | 'mobile' | 'desktop'>('auto');
@@ -247,7 +250,8 @@ export default function Game() {
                 isAutoGame,
                 vibrationStrength,
                 collisionForce,
-                showVictoryBackgrounds
+                showVictoryBackgrounds,
+                showSpawningCountdown
             }
         };
 
@@ -267,9 +271,9 @@ export default function Game() {
         setShowNames(s.showNames);
         setIsAutoGame(s.isAutoGame);
         setVibrationStrength(s.vibrationStrength);
-        setVibrationStrength(s.vibrationStrength);
         setCollisionForce(s.collisionForce);
         setShowVictoryBackgrounds(s.showVictoryBackgrounds ?? true);
+        setShowSpawningCountdown(s.showSpawningCountdown ?? true);
     };
 
     const deletePreset = (id: string) => {
@@ -365,6 +369,27 @@ export default function Game() {
             return () => clearTimeout(timer);
         }
     }, [autoCountdown, gameStatus]);
+
+    // Spawning Countdown Timer
+    useEffect(() => {
+        let timer: NodeJS.Timeout | null = null;
+
+        if (gameStatus === 'spawning' && spawningCountdown !== null && spawningCountdown > 0) {
+            timer = setInterval(() => {
+                setSpawningCountdown(prev => (prev !== null && prev > 0) ? prev - 1 : 0);
+            }, 1000);
+        } else if (gameStatus === 'spawning' && spawningCountdown === 0) {
+            const finalTimer = setTimeout(() => {
+                setGameStatus('playing');
+                setSpawningCountdown(null);
+            }, 800);
+            return () => clearTimeout(finalTimer);
+        }
+
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [gameStatus, spawningCountdown]);
 
     const playSound = (type: 'impact' | 'pop') => {
         if (!soundEnabled) return;
@@ -506,12 +531,13 @@ export default function Game() {
         setFlags(newFlags);
         updateHud(newFlags.length);
 
-        setGameStatus('spawning'); // Transition status names to match logic
-
-        // Vibration phase length (2 seconds)
-        setTimeout(() => {
-            setGameStatus('playing');
-        }, 2500);
+        setGameStatus('spawning');
+        if (showSpawningCountdown) {
+            setSpawningCountdown(3);
+        } else {
+            setSpawningCountdown(null);
+            setTimeout(() => setGameStatus('playing'), 1000);
+        }
 
         startLoop();
     };
@@ -877,261 +903,179 @@ export default function Game() {
                     <div className={`absolute top-0 right-0 h-full ${isMobile ? 'w-full max-w-xs' : 'w-80'} ${isDarkMode ? 'bg-slate-900/95 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900'} backdrop-blur-xl border-l shadow-2xl transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} p-8 flex flex-col`}>
                         <h2 className="text-3xl font-black tracking-tighter mb-8 shrink-0">SETTINGS</h2>
 
-                        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-8">
 
-                            {/* Settings Controls */}
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70">Points to Win: {tempPoints}</span>
-                                <input
-                                    type="range"
-                                    min="1"
-                                    max="20"
-                                    value={tempPoints}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value);
-                                        setTempPoints(val);
-                                        setPointsToWin(val);
-                                    }}
-                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                                />
+                            {/* Gameplay Settings */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black opacity-40 uppercase tracking-[0.2em] mb-4">Gameplay Physics</h3>
+
+                                <div className="space-y-6 px-1">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Points to Win</span>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xs font-black text-indigo-500 w-6 text-right">{tempPoints}</span>
+                                            <input type="range" min="1" max="20" value={tempPoints} onChange={(e) => { const val = parseInt(e.target.value); setTempPoints(val); setPointsToWin(val); }} className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Game Speed</span>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xs font-black text-indigo-500 w-6 text-right">{gameSpeed.toFixed(1)}</span>
+                                            <input type="range" min="0.1" max="2.0" step="0.1" value={gameSpeed} onChange={(e) => setGameSpeed(parseFloat(e.target.value))} className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Arena Gap</span>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xs font-black text-indigo-500 w-6 text-right">{(gapSize * 100).toFixed(0)}</span>
+                                            <input type="range" min="0.05" max="0.4" step="0.01" value={gapSize} onChange={(e) => setGapSize(parseFloat(e.target.value))} className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Rotation</span>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xs font-black text-indigo-500 w-6 text-right">{(rotationSpeed * 5000).toFixed(0)}</span>
+                                            <input type="range" min="0.002" max="0.05" step="0.002" value={rotationSpeed} onChange={(e) => setRotationSpeed(parseFloat(e.target.value))} className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Vibration</span>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xs font-black text-indigo-500 w-6 text-right">{vibrationStrength.toFixed(0)}</span>
+                                            <input type="range" min="0" max="10" step="1" value={vibrationStrength} onChange={(e) => setVibrationStrength(parseFloat(e.target.value))} className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto" />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Collision</span>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xs font-black text-indigo-500 w-6 text-right">{collisionForce.toFixed(0)}</span>
+                                            <input type="range" min="5" max="50" step="1" value={collisionForce} onChange={(e) => setCollisionForce(parseFloat(e.target.value))} className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto" />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70">Speed: {gameSpeed.toFixed(1)}x</span>
-                                <input
-                                    type="range"
-                                    min="0.1"
-                                    max="2.0"
-                                    step="0.1"
-                                    value={gameSpeed}
-                                    onChange={(e) => setGameSpeed(parseFloat(e.target.value))}
-                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                                />
-                            </div>
+                            {/* Visual Settings */}
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                <h3 className="text-xs font-black opacity-40 uppercase tracking-[0.2em] mb-4">Visuals & Style</h3>
 
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70">Size: {((flagSize / 25) * 100).toFixed(0)}%</span>
-                                <input
-                                    type="range"
-                                    min="10"
-                                    max="40"
-                                    step="1"
-                                    value={flagSize}
-                                    onChange={(e) => setFlagSize(parseFloat(e.target.value))}
-                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                                />
-                            </div>
+                                <div className="space-y-6 px-1">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Flag Size</span>
+                                        <div className="flex items-center space-x-3">
+                                            <span className="text-xs font-black text-indigo-500 w-6 text-right">{((flagSize / 25) * 100).toFixed(0)}</span>
+                                            <input type="range" min="10" max="40" step="1" value={flagSize} onChange={(e) => setFlagSize(parseFloat(e.target.value))} className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto" />
+                                        </div>
+                                    </div>
 
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70">Rotation: {(rotationSpeed * 5000).toFixed(0)}%</span>
-                                <input
-                                    type="range"
-                                    min="0.002"
-                                    max="0.05"
-                                    step="0.002"
-                                    value={rotationSpeed}
-                                    onChange={(e) => setRotationSpeed(parseFloat(e.target.value))}
-                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                                />
-                            </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Flag Shape</span>
+                                        <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 pointer-events-auto">
+                                            <button onClick={() => setFlagShape('circle')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${flagShape === 'circle' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>CIRCLE</button>
+                                            <button onClick={() => setFlagShape('rect')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${flagShape === 'rect' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>RECT</button>
+                                        </div>
+                                    </div>
 
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70">Gap: {(gapSize * 100).toFixed(0)}%</span>
-                                <input
-                                    type="range"
-                                    min="0.05"
-                                    max="0.4"
-                                    step="0.01"
-                                    value={gapSize}
-                                    onChange={(e) => setGapSize(parseFloat(e.target.value))}
-                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                                />
-                            </div>
-
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70">Vibration: {vibrationStrength.toFixed(0)}</span>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="10"
-                                    step="1"
-                                    value={vibrationStrength}
-                                    onChange={(e) => setVibrationStrength(parseFloat(e.target.value))}
-                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                                />
-                            </div>
-
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70">Collision: {collisionForce.toFixed(0)}</span>
-                                <input
-                                    type="range"
-                                    min="5"
-                                    max="50"
-                                    step="1"
-                                    value={collisionForce}
-                                    onChange={(e) => setCollisionForce(parseFloat(e.target.value))}
-                                    className="w-24 h-1.5 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 pointer-events-auto"
-                                />
-                            </div>
-
-                            {/* Toggles */}
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70 font-bold">Sound Effects</span>
-                                <button
-                                    onClick={() => setSoundEnabled(!soundEnabled)}
-                                    className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${soundEnabled ? 'bg-indigo-600' : 'bg-slate-600'}`}
-                                >
-                                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${soundEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                                </button>
-                            </div>
-
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-sm font-medium opacity-70 font-bold">Show Names</span>
-                                <button
-                                    onClick={() => setShowNames(!showNames)}
-                                    className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${showNames ? 'bg-indigo-600' : 'bg-slate-600'}`}
-                                >
-                                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${showNames ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                                </button>
-                            </div>
-
-                            <div className="flex justify-between items-center mb-8">
-                                <span className="text-sm font-medium opacity-70 font-bold">Auto Game</span>
-                                <button
-                                    onClick={() => setIsAutoGame(!isAutoGame)}
-                                    className={`w-12 h-6 rounded-full transition-colors relative pointer-events-auto ${isAutoGame ? 'bg-indigo-600' : 'bg-slate-600'}`}
-                                >
-                                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isAutoGame ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                                </button>
-                            </div>
-
-                            {/* Device Mode Selector */}
-                            <div className="flex justify-between items-center mb-8 p-4 rounded-2xl bg-white/5 border border-white/10">
-                                <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Device Mode</span>
-                                <div className="flex bg-slate-800 rounded-xl p-1">
-                                    {(['auto', 'mobile', 'desktop'] as const).map((mode) => (
-                                        <button
-                                            key={mode}
-                                            onClick={() => setDeviceMode(mode)}
-                                            className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${deviceMode === mode ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                                        >
-                                            {mode}
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Show Names</span>
+                                        <button onClick={() => setShowNames(!showNames)} className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out pointer-events-auto ${showNames ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${showNames ? 'translate-x-4' : 'translate-x-0'}`} />
                                         </button>
-                                    ))}
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Victory BG</span>
+                                        <button onClick={() => setShowVictoryBackgrounds(!showVictoryBackgrounds)} className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out pointer-events-auto ${showVictoryBackgrounds ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${showVictoryBackgrounds ? 'translate-x-4' : 'translate-x-0'}`} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="flex justify-between items-center mb-10 p-4 rounded-2xl bg-white/5 border border-white/10">
-                                <span className="text-sm font-bold opacity-70 uppercase tracking-widest">Flag Shape</span>
-                                <div className="flex bg-slate-800 rounded-xl p-1">
-                                    <button
-                                        onClick={() => setFlagShape('circle')}
-                                        className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'circle' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                                    >
-                                        CIRCLE
-                                    </button>
-                                    <button
-                                        onClick={() => setFlagShape('rect')}
-                                        className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${flagShape === 'rect' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                                    >
-                                        RECT
-                                    </button>
+                            {/* Automation & System */}
+                            <div className="space-y-4 pt-4 border-t border-white/5">
+                                <h3 className="text-xs font-black opacity-40 uppercase tracking-[0.2em] mb-4">System & Controls</h3>
+
+                                <div className="space-y-6 px-1">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Countdown</span>
+                                        <button onClick={() => setShowSpawningCountdown(!showSpawningCountdown)} className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out pointer-events-auto ${showSpawningCountdown ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${showSpawningCountdown ? 'translate-x-4' : 'translate-x-0'}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Auto Game</span>
+                                        <button onClick={() => setIsAutoGame(!isAutoGame)} className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out pointer-events-auto ${isAutoGame ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${isAutoGame ? 'translate-x-4' : 'translate-x-0'}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Sound FX</span>
+                                        <button onClick={() => setSoundEnabled(!soundEnabled)} className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out pointer-events-auto ${soundEnabled ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${soundEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Device</span>
+                                        <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 pointer-events-auto">
+                                            {(['auto', 'mobile', 'desktop'] as const).map((mode) => (
+                                                <button key={mode} onClick={() => setDeviceMode(mode)} className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${deviceMode === mode ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>{mode}</button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-
-                            <button
-                                onClick={() => {
-                                    setPointsToWin(tempPoints);
-                                    setIsSidebarOpen(false);
-                                }}
-                                className="w-full mt-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-all"
-                            >
-                                Apply
-                            </button>
 
                             {/* Profiles Section */}
                             <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
-                                <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Profiles</h3>
-                                <div className="flex space-x-2">
-                                    <input
-                                        type="text"
-                                        placeholder="Profile Name..."
-                                        value={newPresetName}
-                                        onChange={(e) => setNewPresetName(e.target.value)}
-                                        className={`flex-1 bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
-                                    />
-                                    <button
-                                        onClick={saveCurrentAsPreset}
-                                        className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-all active:scale-95"
-                                        title="Save as Profile"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                                        </svg>
+                                <h3 className="text-xs font-black opacity-40 uppercase tracking-[0.2em] mb-4">Profiles</h3>
+                                <div className="flex space-x-2 pointer-events-auto">
+                                    <input type="text" placeholder="Name..." value={newPresetName} onChange={(e) => setNewPresetName(e.target.value)} className={`flex-1 bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`} />
+                                    <button onClick={saveCurrentAsPreset} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg transition-all active:scale-95" title="Save as Profile">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                                    {presets.length === 0 && <p className="text-xs italic opacity-50 px-1">No saved profiles yet.</p>}
+                                <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar pointer-events-auto">
+                                    {presets.length === 0 && <p className="text-xs italic opacity-30 px-1">No profiles yet.</p>}
                                     {presets.map(preset => (
                                         <div key={preset.id} className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'}`}>
-                                            <button onClick={() => loadPreset(preset)} className="flex-1 text-left font-bold text-xs truncate mr-2">{preset.name}</button>
+                                            <button onClick={() => loadPreset(preset)} className="flex-1 text-left font-bold text-[10px] uppercase tracking-wider truncate mr-2">{preset.name}</button>
                                             <button onClick={() => deletePreset(preset.id)} className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 transition-opacity">
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                             </button>
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Continents & Country Search */}
-                            <div className="mt-10 space-y-4">
-                                <div className="flex items-center justify-between px-1 mb-4">
-                                    <label className="text-sm font-bold opacity-70 uppercase tracking-widest text-[#1e293b] dark:text-slate-400">Victory Backgrounds</label>
-                                    <button
-                                        onClick={() => setShowVictoryBackgrounds(!showVictoryBackgrounds)}
-                                        className={`w-10 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${showVictoryBackgrounds ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
-                                    >
-                                        <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${showVictoryBackgrounds ? 'translate-x-4' : 'translate-x-0'}`} />
-                                    </button>
+                            {/* Continents */}
+                            <div className="pt-4 border-t border-white/5 pb-20">
+                                <h3 className="text-xs font-black opacity-40 uppercase tracking-[0.2em] mb-4">Battleground</h3>
+                                <div className="grid grid-cols-1 gap-2 pointer-events-auto">
+                                    {continents.map(cont => (
+                                        <button key={cont} onClick={() => { setSelectedContinent(cont); setCountrySearch(''); }} className={`w-full py-3 px-4 rounded-xl font-bold text-xs text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
+                                            <span>{cont}</span>
+                                            {selectedContinent === cont && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+                                        </button>
+                                    ))}
                                 </div>
-
-                                <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest px-1">Continents</h3>
-                                {continents.map(cont => (
-                                    <button key={cont} onClick={() => { setSelectedContinent(cont); setCountrySearch(''); }} className={`w-full py-4 px-6 rounded-2xl font-bold text-left flex justify-between items-center transition-all ${selectedContinent === cont ? 'bg-indigo-600 text-white shadow-lg' : (isDarkMode ? 'bg-white/5 text-slate-400 hover:bg-white/10' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}`}>
-                                        <span>{cont}</span>
-                                    </button>
-                                ))}
                             </div>
-
-                            {selectedContinent !== 'All' && (
-                                <div className="mt-8 pt-8 border-t border-white/10 space-y-4">
-                                    <h3 className="text-sm font-bold opacity-70 uppercase tracking-widest">Countries in {selectedContinent}</h3>
-                                    <input
-                                        type="text"
-                                        placeholder="Search country..."
-                                        value={countrySearch}
-                                        onChange={(e) => setCountrySearch(e.target.value)}
-                                        className={`w-full bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors ${isDarkMode ? 'border-white/10 text-white placeholder:text-slate-600' : 'border-slate-200 text-slate-900 placeholder:text-slate-400'}`}
-                                    />
-                                    <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                                        {WORLD_FLAGS
-                                            .filter(f => f.continent === (selectedContinent === 'America' ? 'Americas' : selectedContinent))
-                                            .filter(f => f.name.toLowerCase().includes(countrySearch.toLowerCase()))
-                                            .map(country => (
-                                                <div key={country.code} className={`flex items-center space-x-3 p-2 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'}`}>
-                                                    <img src={`https://flagcdn.com/w40/${country.code}.png`} className="w-8 h-5 object-cover rounded shadow-sm" alt={country.name} />
-                                                    <span className="font-bold text-xs truncate">{country.name}</span>
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                </div>
-                            )}
                         </div>
-                        <button onClick={() => { setIsSidebarOpen(false); initGame(); }} className="mt-8 w-full py-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all shrink-0">RESET FLAGS</button>
+
+                        {/* Action Buttons - Fixed at bottom */}
+                        <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-900 via-slate-900 to-transparent pt-12 space-y-3 pointer-events-auto">
+                            <button onClick={() => { setIsSidebarOpen(false); initGame(); }} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-widest text-xs">RESET FLAGS</button>
+                            <button onClick={() => setIsSidebarOpen(false)} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl transition-all text-xs uppercase tracking-widest">Close Menu</button>
+                        </div>
                     </div>
                 </div>
 
@@ -1303,6 +1247,18 @@ export default function Game() {
                         );
                     })}
                 </div>
+
+                {/* Spawning Countdown Overlay */}
+                {gameStatus === 'spawning' && showSpawningCountdown && spawningCountdown !== null && (
+                    <div className="absolute inset-0 z-[60000] flex items-center justify-center pointer-events-none">
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-indigo-500/20 blur-[100px] animate-pulse rounded-full"></div>
+                            <div key={spawningCountdown} className="relative text-9xl font-black text-white drop-shadow-[0_10px_30px_rgba(0,0,0,0.5)] animate-spawning-pop">
+                                {spawningCountdown === 0 ? 'GO!' : spawningCountdown}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
             {/* Final closing div for the new outer wrapper */}
         </div>
